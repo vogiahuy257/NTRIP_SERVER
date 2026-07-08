@@ -1,0 +1,54 @@
+ls /dev/ttyAMA*
+
+------ run ------
+
+ter1:
+
+cd ~/rtk_client
+source venv/bin/activate
+
+python3 ntrip_to_px4_mavsdk.py \
+  --server-host 172.20.10.2 \
+  --server-port 2101 \
+  --mountpoint BASE \
+  --username huy \
+  --password 123456 \
+  --px4-url tcp://127.0.0.1:5760  \
+  --debug
+
+
+ter2:
+
+mavlink-routerd /dev/ttyAMA0:115200 \
+    -e 127.0.0.1:14540 \
+    -e 172.20.10.2:14540 \
+    -e 172.20.10.15:14550
+
+mavlink-routerd /dev/ttyAMA0:115200 \
+  -e 127.0.0.1:14540 \
+  -e 172.20.10.15:14550
+
+cd /home/pihuy/rtk_client/ntrip_cc
+
+rm -rf build
+cmake -S . -B build
+cmake --build build -j$(nproc)
+
+  cd /home/pihuy/rtk_client/ntrip_cc
+
+sudo ./build/ntrip_bridge --config /home/pihuy/rtk_client/ntrip_cc/config.conf
+
+sudo stty -F /dev/ttyAMA0 115200 raw -echo -crtscts
+
+while true; do
+  printf 'PX4_RX_TEST_1234567890'
+  sleep 0.05
+done | sudo tee /dev/ttyAMA0 > /dev/null
+
+
+
+------------ chay log ---------
+
+cd /home/pihuy/rtk_client/ntrip_cc_with_internal_metrics/ntrip_cc
+
+sudo ./build/ntrip_bridge --config ./config.conf
