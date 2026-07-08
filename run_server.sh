@@ -1,0 +1,12 @@
+python3 ntrip_sever.py \
+  --serial /dev/ttyACM0 \
+  --baud 115200 \
+  --host 0.0.0.0 \
+  --port 2101 \
+  --mountpoint BASE \
+  --username huy \
+  --password 123456 \
+  --http-200 \
+  --log-interval 1 \
+  --report-interval 10 \
+  --metrics-csv ntrip_server_metrics.csv

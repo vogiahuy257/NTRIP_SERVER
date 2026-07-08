@@ -1,0 +1,3 @@
+/mnt/data/ntrip_edit/ntrip_cc/build_test/_deps/mavlink_headers-subbuild/CMakeFiles/mavlink_headers-populate.dir
+/mnt/data/ntrip_edit/ntrip_cc/build_test/_deps/mavlink_headers-subbuild/CMakeFiles/edit_cache.dir
+/mnt/data/ntrip_edit/ntrip_cc/build_test/_deps/mavlink_headers-subbuild/CMakeFiles/rebuild_cache.dir

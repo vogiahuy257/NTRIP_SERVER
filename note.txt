@@ -1,0 +1,33 @@
+
+--debug              bật log chi tiết
+--debug-hex          in hex byte raw
+--debug-rtcm         parse RTCM frame, in message type, length
+--log-interval       chỉnh chu kỳ log
+--max-hex-bytes      giới hạn số byte hex in ra
+
+----- sever ------------
+
+python3 ntrip_sever.py \
+  --serial /dev/ttyACM0 \
+  --baud 115200 \
+  --host 0.0.0.0 \
+  --port 2101 \
+  --mountpoint BASE \
+  --username huy \
+  --password 123456 \
+  --http-200 \
+  --log-interval 1 \
+  --report-interval 10 \
+  --metrics-csv ntrip_server_metrics.csv
+
+----- client --------
+
+
+
+--- test  -------
+
+printf "GET /BASE HTTP/1.0\r\nUser-Agent: NTRIP test\r\n\r\n" | nc 172.20.10.2 2101 | hexdump -C | head -n 40
+
+mavlink-routerd /dev/ttyAMA0:115200 \
+  -e 127.0.0.1:14540 \
+  -e 192.168.1.255:14550
