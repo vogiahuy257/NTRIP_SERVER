@@ -1,0 +1,279 @@
+===== resources/js/app.tsx =====
+import { createInertiaApp } from '@inertiajs/react';
+import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { initializeTheme } from '@/hooks/use-appearance';
+import AppLayout from '@/layouts/app-layout';
+import AuthLayout from '@/layouts/auth-layout';
+import SettingsLayout from '@/layouts/settings/layout';
+import { configureEcho } from '@laravel/echo-react';
+
+configureEcho({
+    broadcaster: 'reverb',
+});
+
+const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+
+createInertiaApp({
+    title: (title) => (title ? `${title} - ${appName}` : appName),
+    layout: (name) => {
+        switch (true) {
+            case name === 'welcome':
+            case name === 'dashboard':
+            case name.startsWith('stations/'):
+                return null;
+            case name.startsWith('auth/'):
+                return AuthLayout;
+            case name.startsWith('settings/'):
+                return [AppLayout, SettingsLayout];
+            default:
+                return AppLayout;
+        }
+    },
+    strictMode: true,
+    withApp(app) {
+        return (
+            <TooltipProvider delayDuration={0}>
+                {app}
+                <Toaster />
+            </TooltipProvider>
+        );
+    },
+    progress: {
+        color: '#4B5563',
+    },
+});
+
+// This will set light / dark mode on load...
+initializeTheme();
+
+===== resources/js/layouts/map-dashboard-layout.tsx =====
+import {
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type ReactNode,
+} from 'react';
+
+import {
+    NtripMap,
+    type NtripMapHandle,
+} from '@/components/dashboard/ntrip-map';
+
+import { MapTopNavigation } from '@/components/dashboard/map-top-navigation';
+
+import {
+    MapDashboardProvider,
+    type MapDashboardContextValue,
+} from '@/contexts/map-dashboard-context';
+
+import { useDashboardData } from '@/hooks/use-dashboard-data';
+
+import type { DashboardStation } from '@/types/ntrip-dashboard';
+
+const DESIGN_TOKENS = {
+    '--ntrip-ink': '20 33 61',
+    '--ntrip-cloud': '247 249 245',
+    '--ntrip-teal': '47 191 159',
+    '--ntrip-amber': '242 184 75',
+    '--ntrip-coral': '239 91 91',
+} as CSSProperties;
+
+export default function MapDashboardLayout({
+    children,
+}: {
+    children: ReactNode;
+}) {
+    const dashboardData = useDashboardData();
+
+    const { stations } = dashboardData;
+
+    const mapRef =
+        useRef<NtripMapHandle | null>(null);
+
+    const [
+        selectedStationId,
+        setSelectedStationId,
+    ] = useState<
+        DashboardStation['id'] | null
+    >(null);
+
+    /*
+     * Keep the current station selected while it
+     * still exists in the refreshed station list.
+     *
+     * Select the first station only when no valid
+     * selection currently exists.
+     */
+    useEffect(() => {
+        if (stations.length === 0) {
+            setSelectedStationId(null);
+            return;
+        }
+
+        setSelectedStationId((currentId) => {
+            const stationStillExists =
+                currentId !== null &&
+                stations.some(
+                    (station) =>
+                        String(station.id) ===
+                        String(currentId),
+                );
+
+            if (stationStillExists) {
+                return currentId;
+            }
+
+            return stations[0].id;
+        });
+    }, [stations]);
+
+    const selectedStation = useMemo(
+        () =>
+            stations.find(
+                (station) =>
+                    String(station.id) ===
+                    String(selectedStationId),
+            ) ?? null,
+        [selectedStationId, stations],
+    );
+
+    const contextValue =
+        useMemo<MapDashboardContextValue>(
+            () => ({
+                ...dashboardData,
+
+                mapRef,
+                selectedStationId,
+                selectedStation,
+                setSelectedStationId,
+            }),
+            [
+                dashboardData,
+                selectedStation,
+                selectedStationId,
+            ],
+        );
+
+    return (
+        <MapDashboardProvider
+            value={contextValue}
+        >
+            <main
+                style={DESIGN_TOKENS}
+                className="
+                    fixed inset-0 z-[60]
+                    isolate
+                    overflow-hidden
+                    bg-[rgb(var(--ntrip-cloud))]
+                    font-sans
+                    text-[rgb(var(--ntrip-ink))]
+                "
+            >
+                <NtripMap
+                    ref={mapRef}
+                    stations={stations}
+                    selectedStationId={
+                        selectedStation?.id ?? null
+                    }
+                    onSelectStation={
+                        setSelectedStationId
+                    }
+                />
+
+                <div
+                    className="
+                        pointer-events-none
+                        absolute inset-0 z-10
+                        bg-[linear-gradient(
+                            180deg,
+                            rgb(var(--ntrip-cloud)/0.20)_0%,
+                            transparent_28%,
+                            transparent_60%,
+                            rgb(var(--ntrip-ink)/0.08)_100%
+                        )]
+                    "
+                />
+
+                {/*
+                 * Page-specific cards are rendered
+                 * above the persistent map.
+                 *
+                 * Each interactive panel must use
+                 * pointer-events-auto.
+                 */}
+                <div className="pointer-events-none absolute inset-2 z-20 grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-2 sm:inset-3 sm:gap-3 lg:inset-4 lg:gap-4">
+                    <MapTopNavigation />
+
+                    {children}
+                </div>
+            </main>
+        </MapDashboardProvider>
+    );
+}
+===== resources/js/contexts/map-dashboard-context.tsx =====
+import {
+    createContext,
+    useContext,
+    type Dispatch,
+    type ReactNode,
+    type RefObject,
+    type SetStateAction,
+} from 'react';
+
+import type { NtripMapHandle } from '@/components/dashboard/ntrip-map';
+import type { useDashboardData } from '@/hooks/use-dashboard-data';
+import type { DashboardStation } from '@/types/ntrip-dashboard';
+
+type DashboardData = ReturnType<typeof useDashboardData>;
+
+export type MapDashboardContextValue = DashboardData & {
+    mapRef: RefObject<NtripMapHandle | null>;
+
+    selectedStationId:
+        | DashboardStation['id']
+        | null;
+
+    selectedStation: DashboardStation | null;
+
+    setSelectedStationId: Dispatch<
+        SetStateAction<
+            DashboardStation['id'] | null
+        >
+    >;
+};
+
+const MapDashboardContext =
+    createContext<MapDashboardContextValue | null>(
+        null,
+    );
+
+export function MapDashboardProvider({
+    value,
+    children,
+}: {
+    value: MapDashboardContextValue;
+    children: ReactNode;
+}) {
+    return (
+        <MapDashboardContext.Provider value={value}>
+            {children}
+        </MapDashboardContext.Provider>
+    );
+}
+
+export function useMapDashboard(): MapDashboardContextValue {
+    const context = useContext(
+        MapDashboardContext,
+    );
+
+    if (context === null) {
+        throw new Error(
+            'useMapDashboard must be used inside MapDashboardProvider.',
+        );
+    }
+
+    return context;
+}

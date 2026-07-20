@@ -1,0 +1,35 @@
+sudo apt update
+
+sudo apt install -y \
+    avahi-daemon \
+    avahi-utils \
+    libnss-mdns
+
+sudo systemctl enable --now avahi-daemon
+sudo systemctl restart avahi-daemon
+
+ ---------------------------- 
+
+OLD_HOSTNAME=$(hostname)
+
+sudo hostnamectl set-hostname ctuav-ntrip
+
+if grep -qE '^127\.0\.1\.1[[:space:]]' /etc/hosts; then
+    sudo sed -i -E \
+        's/^127\.0\.1\.1[[:space:]].*/127.0.1.1\tctuav-ntrip/' \
+        /etc/hosts
+else
+    printf '127.0.1.1\tctuav-ntrip\n' \
+        | sudo tee -a /etc/hosts
+fi
+
+echo "Old hostname: ${OLD_HOSTNAME}"
+hostnamectl
+
+ ---------------------------- 
+
+sudo ufw allow 5353/udp
+sudo ufw allow 8000/tcp
+sudo ufw allow 2101/tcp
+
+sudo ufw status

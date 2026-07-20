@@ -1,0 +1,78 @@
+<?php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class StoreStationRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'device_id' => [
+                'required',
+                'string',
+                'max:64',
+                'regex:/^[A-Za-z0-9_-]+$/',
+                'unique:stations,device_id',
+            ],
+            'name' => [
+                'required',
+                'string',
+                'max:120',
+            ],
+            'enabled' => [
+                'sometimes',
+                'boolean',
+            ],
+            'source_token' => [
+                'required',
+                'string',
+                'min:8',
+                'max:255',
+            ],
+            'caster_host' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'caster_port' => [
+                'sometimes',
+                'integer',
+                'between:1,65535',
+            ],
+            'mountpoint' => [
+                'required',
+                'string',
+                'max:64',
+                'regex:/^[A-Za-z0-9_-]+$/',
+                'unique:mountpoints,name',
+            ],
+            'uart_baud' => [
+                'sometimes',
+                'integer',
+                'between:9600,3000000',
+            ],
+            'telemetry_interval_ms' => [
+                'sometimes',
+                'integer',
+                'between:500,60000',
+            ],
+            'config_poll_interval_ms' => [
+                'sometimes',
+                'integer',
+                'between:5000,3600000',
+            ],
+            'max_rtcm_age_ms' => [
+                'sometimes',
+                'integer',
+                'between:100,60000',
+            ],
+        ];
+    }
+}

@@ -1,0 +1,672 @@
+@theme inline {
+    /* NTRIP palette exposed as normal Tailwind color utilities. */
+    --color-ntrip-ink: rgb(var(--ntrip-ink));
+    --color-ntrip-cloud: rgb(var(--ntrip-cloud));
+    --color-ntrip-teal: rgb(var(--ntrip-teal));
+    --color-ntrip-amber: rgb(var(--ntrip-amber));
+    --color-ntrip-coral: rgb(var(--ntrip-coral));
+
+    /* Compact typography tokens for values used by the dashboard. */
+    --text-offset: 0.0rem; 
+
+    --text-3xs: calc(0.45rem + var(--text-offset));
+    --text-3xs--line-height: 0.65rem;
+    --text-2xs: calc(0.5rem + var(--text-offset));
+    --text-2xs--line-height: 0.7rem;
+    --text-micro: calc(0.55rem + var(--text-offset));
+    --text-micro--line-height: 0.75rem;
+    --text-caption: calc(0.65rem + var(--text-offset));
+    --text-caption--line-height: 0.9rem;
+    --text-title: calc(1.1rem + var(--text-offset));
+    --text-title--line-height: 1.35rem;
+
+    /* Compact radius tokens preserving the original 80% design ratios. */
+    --radius-control-2xs: 0.45rem;
+    --radius-control-xs: 0.5rem;
+    --radius-control-sm: 0.55rem;
+    --radius-control: 0.7rem;
+    --radius-control-lg: 0.9rem;
+    --radius-card: 1rem;
+    --radius-card-lg: 1.1rem;
+    --radius-panel: 1.4rem;
+
+    --blur-ntrip-overlay: 2px;
+
+    /* Very light elevation so the map remains visually dominant. */
+    --shadow-ntrip-panel:
+        inset 0 1px 0 rgb(255 255 255 / 0.26),
+        inset 0 -1px 0 rgb(var(--ntrip-ink) / 0.012),
+        0 1px 3px rgb(var(--ntrip-ink) / 0.018),
+        0 8px 22px rgb(var(--ntrip-ink) / 0.035);
+    --shadow-ntrip-panel-soft:
+        inset 0 1px 0 rgb(255 255 255 / 0.22),
+        inset 0 -1px 0 rgb(var(--ntrip-ink) / 0.01),
+        0 1px 2px rgb(var(--ntrip-ink) / 0.014),
+        0 6px 18px rgb(var(--ntrip-ink) / 0.026);
+    --shadow-ntrip-card:
+        inset 0 1px 0 rgb(255 255 255 / 0.20),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.012),
+        0 4px 12px rgb(var(--ntrip-ink) / 0.022);
+    --shadow-ntrip-inset:
+        inset 0 1px 0 rgb(255 255 255 / 0.22),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.035);
+    --shadow-ntrip-inset-soft:
+        inset 0 1px 0 rgb(255 255 255 / 0.18),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.025);
+    --shadow-ntrip-inset-strong:
+        inset 0 1px 0 rgb(255 255 255 / 0.28),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.045);
+    --shadow-ntrip-inset-control:
+        inset 0 1px 0 rgb(255 255 255 / 0.24),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.045);
+    --shadow-ntrip-elevated:
+        inset 0 1px 0 rgb(255 255 255 / 0.76),
+        inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.075),
+        0 10px 30px rgb(var(--ntrip-ink) / 0.1);
+    --shadow-ntrip-focus:
+        0 0 0 4px rgb(var(--ntrip-cloud) / 0.68),
+        0 0 0 6px rgb(var(--ntrip-teal) / 0.18);
+    --shadow-ntrip-tab:
+        inset 0 1px 0 rgb(255 255 255 / 0.66),
+        0 4px 14px rgb(var(--ntrip-ink) / 0.09);
+    --shadow-ntrip-selected:
+        inset 0 1px 0 rgb(255 255 255 / 0.72),
+        inset 0 0 0 1px rgb(var(--ntrip-teal) / 0.24),
+        0 10px 26px rgb(var(--ntrip-ink) / 0.075);
+    --shadow-ntrip-selected-hover:
+        inset 0 1px 0 rgb(255 255 255 / 0.8),
+        inset 0 0 0 1px rgb(var(--ntrip-teal) / 0.18),
+        0 12px 30px rgb(var(--ntrip-ink) / 0.085);
+    --shadow-ntrip-node: 0 14px 40px rgb(0 0 0 / 0.22);
+    --shadow-ntrip-node-selected:
+        0 0 0 3px rgb(var(--ntrip-teal) / 0.12), 0 16px 44px rgb(0 0 0 / 0.26);
+    --shadow-ntrip-topology-controls: 0 12px 30px rgb(0 0 0 / 0.28);
+    --shadow-ntrip-topology-panel: 0 20px 60px rgb(0 0 0 / 0.34);
+}
+
+/*
+ * Primitive and semantic tokens are global so portal-based UI (dialogs,
+ * popovers and toasts) uses the same design system as the map dashboard.
+ * Change the primitive RGB triplets to reskin the complete NTRIP interface.
+ */
+:root {
+    --ntrip-ink: 20 33 61;
+    --ntrip-cloud: 247 249 245;
+    --ntrip-teal: 47 191 159;
+    --ntrip-amber: 242 184 75;
+    --ntrip-coral: 239 91 91;
+
+    --ntrip-text-primary: rgb(var(--ntrip-ink));
+    --ntrip-text-secondary: rgb(var(--ntrip-ink) / 0.74);
+    --ntrip-text-muted: rgb(var(--ntrip-ink) / 0.62);
+    --ntrip-text-subtle: rgb(var(--ntrip-ink) / 0.52);
+    --ntrip-text-disabled: rgb(var(--ntrip-ink) / 0.42);
+    --ntrip-text-on-dark: rgb(var(--ntrip-cloud));
+
+    --ntrip-surface-page: rgb(var(--ntrip-cloud));
+    --ntrip-surface-strong: rgb(var(--ntrip-cloud) / 0.09);
+    --ntrip-surface-glass: rgb(var(--ntrip-cloud) / 0.035);
+    --ntrip-surface-soft: rgb(var(--ntrip-cloud) / 0.025);
+    --ntrip-surface-muted: rgb(var(--ntrip-cloud) / 0.018);
+    --ntrip-surface-dark: rgb(var(--ntrip-ink));
+
+    --ntrip-glass-border: rgb(255 255 255 / 0.50);
+    --ntrip-glass-border-strong: rgb(255 255 255 / 0.62);
+    --ntrip-glass-highlight: rgb(255 255 255 / 0.08);
+    --ntrip-glass-blur: 7px;
+    --ntrip-glass-saturation: 108%;
+
+    --ntrip-border-soft: rgb(var(--ntrip-ink) / 0.055);
+    --ntrip-border-default: rgb(var(--ntrip-ink) / 0.07);
+    --ntrip-border-control: rgb(var(--ntrip-ink) / 0.085);
+    --ntrip-border-strong: rgb(var(--ntrip-ink) / 0.11);
+
+    --ntrip-status-healthy: rgb(var(--ntrip-teal));
+    --ntrip-status-warning: rgb(var(--ntrip-amber));
+    --ntrip-status-critical: rgb(var(--ntrip-coral));
+    --ntrip-status-offline: rgb(var(--ntrip-ink) / 0.45);
+
+    --ntrip-map-overlay: linear-gradient(
+        180deg,
+        rgb(var(--ntrip-cloud) / 0.2) 0%,
+        transparent 28%,
+        transparent 60%,
+        rgb(var(--ntrip-ink) / 0.08) 100%
+    );
+}
+
+.ntrip-dashboard,
+html[data-ntrip-dashboard='true'] {
+    background: var(--ntrip-surface-page);
+    color: var(--ntrip-text-primary);
+
+    font-size: 110%;
+}
+
+@layer components {
+    .ntrip-map-overlay {
+        background: var(--ntrip-map-overlay);
+    }
+
+    /*
+     * Shared iPhone-style frosted material.
+     * Opacity changes by variant, while class names remain unchanged.
+     */
+    .ntrip-glass-panel,
+    .ntrip-glass-panel-dense,
+    .ntrip-glass-panel-strong {
+        --ntrip-panel-fill: 0.025;
+        --ntrip-panel-highlight: 0.045;
+        --ntrip-panel-blur: var(--ntrip-glass-blur);
+
+        position: relative;
+        isolation: isolate;
+        border: 1px solid var(--ntrip-glass-border);
+        background:
+            linear-gradient(
+                145deg,
+                rgb(255 255 255 / var(--ntrip-panel-highlight)) 0%,
+                rgb(255 255 255 / 0.018) 42%,
+                rgb(255 255 255 / 0.006) 100%
+            ),
+            rgb(var(--ntrip-cloud) / var(--ntrip-panel-fill));
+        background-clip: padding-box;
+        box-shadow: var(--shadow-ntrip-panel);
+        -webkit-backdrop-filter: saturate(var(--ntrip-glass-saturation))
+            blur(var(--ntrip-panel-blur));
+        backdrop-filter: saturate(var(--ntrip-glass-saturation))
+            blur(var(--ntrip-panel-blur));
+        transform: translateZ(0);
+    }
+
+    /* General floating card: clearest view of the map underneath. */
+    .ntrip-glass-panel {
+        --ntrip-panel-fill: 0.018;
+        --ntrip-panel-highlight: 0.035;
+        --ntrip-panel-blur: 5px;
+    }
+
+    /* Data-heavy panel: slightly more opaque for tables and lists. */
+    .ntrip-glass-panel-dense {
+        --ntrip-panel-fill: 0.032;
+        --ntrip-panel-highlight: 0.045;
+        --ntrip-panel-blur: 6px;
+    }
+
+    /* Primary sidebar, dialog or details panel. */
+    .ntrip-glass-panel-strong {
+        --ntrip-panel-fill: 0.052;
+        --ntrip-panel-highlight: 0.06;
+        --ntrip-panel-blur: 7px;
+        border-color: var(--ntrip-glass-border-strong);
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.30),
+            inset 0 -1px 0 rgb(var(--ntrip-ink) / 0.012),
+            0 1px 3px rgb(var(--ntrip-ink) / 0.018),
+            0 9px 24px rgb(var(--ntrip-ink) / 0.038);
+    }
+
+    /* Inner surfaces do not blur again, avoiding glass-on-glass noise. */
+    .ntrip-section {
+        border: 1px solid rgb(255 255 255 / 0.42);
+        background:
+            linear-gradient(
+                155deg,
+                rgb(255 255 255 / 0.035),
+                rgb(255 255 255 / 0.006)
+            ),
+            rgb(var(--ntrip-cloud) / 0.012);
+        box-shadow: var(--shadow-ntrip-inset);
+    }
+
+    .ntrip-card {
+        border: 1px solid rgb(255 255 255 / 0.46);
+        background:
+            linear-gradient(
+                150deg,
+                rgb(255 255 255 / 0.04),
+                rgb(255 255 255 / 0.007)
+            ),
+            rgb(var(--ntrip-cloud) / 0.016);
+        box-shadow: var(--shadow-ntrip-card);
+        transition:
+            border-color 180ms ease,
+            box-shadow 180ms ease,
+            transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .ntrip-card[data-interactive='true']:hover {
+        border-color: rgb(255 255 255 / 0.42);
+        box-shadow:
+            inset 0 1px 0 rgb(255 255 255 / 0.34),
+            inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.025),
+            0 8px 22px rgb(var(--ntrip-ink) / 0.065);
+        transform: translateY(-1px);
+    }
+
+    .ntrip-card[data-interactive='true']:active {
+        transform: translateY(0) scale(0.994);
+    }
+
+    .ntrip-control {
+        border-color: rgb(255 255 255 / 0.44);
+        background:
+            linear-gradient(
+                180deg,
+                rgb(255 255 255 / 0.035),
+                rgb(255 255 255 / 0.006)
+            ),
+            rgb(var(--ntrip-cloud) / 0.014);
+        box-shadow: var(--shadow-ntrip-inset-control);
+    }
+
+    .ntrip-input {
+        border-color: rgb(255 255 255 / 0.48);
+        background:
+            linear-gradient(
+                180deg,
+                rgb(255 255 255 / 0.04),
+                rgb(255 255 255 / 0.007)
+            ),
+            rgb(var(--ntrip-cloud) / 0.018);
+        box-shadow:
+            inset 0 1px 2px rgb(var(--ntrip-ink) / 0.03),
+            inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.035);
+        transition:
+            border-color 160ms ease,
+            box-shadow 160ms ease,
+            background-color 160ms ease;
+    }
+
+    .ntrip-input:focus,
+    .ntrip-input:focus-visible {
+        border-color: rgb(var(--ntrip-teal) / 0.36);
+        box-shadow:
+            inset 0 1px 2px rgb(var(--ntrip-ink) / 0.025),
+            inset 0 0 0 1px rgb(var(--ntrip-teal) / 0.14),
+            0 0 0 3px rgb(var(--ntrip-teal) / 0.07);
+        outline: none;
+    }
+
+    .ntrip-alert-critical {
+        border-color: rgb(var(--ntrip-coral) / 0.28);
+        background: rgb(var(--ntrip-coral) / 0.1);
+        color: rgb(var(--ntrip-coral));
+    }
+
+    .ntrip-status-pill {
+        --ntrip-status-color: var(--ntrip-status-offline);
+        --ntrip-status-border: rgb(var(--ntrip-ink) / 0.14);
+        --ntrip-status-background: rgb(var(--ntrip-ink) / 0.07);
+        --ntrip-status-text: rgb(var(--ntrip-ink) / 0.68);
+
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid var(--ntrip-status-border);
+        background: var(--ntrip-status-background);
+        color: var(--ntrip-status-text);
+    }
+
+    .ntrip-status-pill[data-status='healthy'],
+    .ntrip-status-pill[data-status='online'] {
+        --ntrip-status-color: var(--ntrip-status-healthy);
+        --ntrip-status-border: rgb(var(--ntrip-teal) / 0.28);
+        --ntrip-status-background: rgb(var(--ntrip-teal) / 0.12);
+        --ntrip-status-text: rgb(var(--ntrip-ink));
+    }
+
+    .ntrip-status-pill[data-status='warning'],
+    .ntrip-status-pill[data-status='waiting-source'],
+    .ntrip-status-pill[data-status='degraded'] {
+        --ntrip-status-color: var(--ntrip-status-warning);
+        --ntrip-status-border: rgb(var(--ntrip-amber) / 0.34);
+        --ntrip-status-background: rgb(var(--ntrip-amber) / 0.16);
+        --ntrip-status-text: rgb(var(--ntrip-ink));
+    }
+
+    .ntrip-status-pill[data-status='critical'],
+    .ntrip-status-pill[data-status='disabled'] {
+        --ntrip-status-color: var(--ntrip-status-critical);
+        --ntrip-status-border: rgb(var(--ntrip-coral) / 0.3);
+        --ntrip-status-background: rgb(var(--ntrip-coral) / 0.13);
+        --ntrip-status-text: rgb(var(--ntrip-ink));
+    }
+
+    .ntrip-status-pill__dot {
+        background: var(--ntrip-status-color);
+    }
+
+    .ntrip-status-dot,
+    .ntrip-status-inline {
+        --ntrip-inline-status-color: var(--ntrip-status-offline);
+    }
+
+    .ntrip-status-dot[data-status='healthy'],
+    .ntrip-status-dot[data-status='online'],
+    .ntrip-status-inline[data-status='healthy'],
+    .ntrip-status-inline[data-status='online'] {
+        --ntrip-inline-status-color: var(--ntrip-status-healthy);
+    }
+
+    .ntrip-status-dot[data-status='warning'],
+    .ntrip-status-dot[data-status='waiting-source'],
+    .ntrip-status-dot[data-status='degraded'],
+    .ntrip-status-inline[data-status='warning'],
+    .ntrip-status-inline[data-status='waiting-source'],
+    .ntrip-status-inline[data-status='degraded'] {
+        --ntrip-inline-status-color: var(--ntrip-status-warning);
+    }
+
+    .ntrip-status-dot[data-status='critical'],
+    .ntrip-status-dot[data-status='disabled'],
+    .ntrip-status-inline[data-status='critical'],
+    .ntrip-status-inline[data-status='disabled'] {
+        --ntrip-inline-status-color: var(--ntrip-status-critical);
+    }
+
+    .ntrip-status-dot,
+    .ntrip-status-inline__dot {
+        background: var(--ntrip-inline-status-color);
+    }
+
+    .ntrip-status-inline {
+        color: var(--ntrip-inline-status-color);
+    }
+
+    .ntrip-topology-edge .react-flow__edge-path {
+        stroke: rgb(var(--ntrip-teal));
+    }
+
+    .ntrip-topology-background {
+        color: rgb(var(--ntrip-cloud));
+    }
+
+    .ntrip-topology-controls {
+        overflow: hidden !important;
+        border: 1px solid rgb(var(--ntrip-cloud) / 0.12) !important;
+        border-radius: var(--radius-xl) !important;
+        background: rgb(var(--ntrip-ink) / 0.92) !important;
+        fill: rgb(var(--ntrip-cloud)) !important;
+        box-shadow: var(--shadow-ntrip-topology-controls) !important;
+    }
+
+    .ntrip-topology-controls > button {
+        border-color: rgb(var(--ntrip-cloud) / 0.08) !important;
+        background: transparent !important;
+        color: rgb(var(--ntrip-cloud)) !important;
+    }
+
+    .ntrip-topology-controls > button:hover {
+        background: rgb(var(--ntrip-cloud) / 0.08) !important;
+    }
+}
+
+
+/* Opaque fallback for browsers that cannot blur the content behind a panel. */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .ntrip-glass-panel {
+        background: rgb(var(--ntrip-cloud) / 0.48);
+    }
+
+    .ntrip-glass-panel-dense {
+        background: rgb(var(--ntrip-cloud) / 0.56);
+    }
+
+    .ntrip-glass-panel-strong {
+        background: rgb(var(--ntrip-cloud) / 0.64);
+    }
+
+    .ntrip-map .maplibregl-ctrl-attrib {
+        background: rgb(var(--ntrip-cloud) / 0.92);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ntrip-card,
+    .ntrip-input {
+        transition: none;
+    }
+}
+
+/* MapLibre and marker presentation lives in CSS, while map formulas stay in TS. */
+.ntrip-map .maplibregl-map,
+.ntrip-map .maplibregl-canvas-container,
+.ntrip-map .maplibregl-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.ntrip-map .maplibregl-ctrl-attrib {
+    border: 1px solid rgb(255 255 255 / 0.58);
+    border-radius: var(--radius-xl);
+    background:
+        linear-gradient(
+            145deg,
+            rgb(255 255 255 / 0.12),
+            rgb(255 255 255 / 0.025)
+        ),
+        rgb(var(--ntrip-cloud) / 0.045);
+    color: rgb(var(--ntrip-ink) / 0.62);
+    box-shadow:
+        inset 0 1px 0 rgb(255 255 255 / 0.72),
+        0 6px 18px rgb(var(--ntrip-ink) / 0.09);
+    -webkit-backdrop-filter: saturate(108%) blur(7px);
+    backdrop-filter: saturate(108%) blur(7px);
+    transform: scale(1);
+    transform-origin: bottom left;
+}
+
+.ntrip-map .maplibregl-ctrl-attrib a {
+    color: rgb(var(--ntrip-ink) / 0.76);
+}
+
+.ntrip-map .ntrip-station-marker {
+    --marker-color: rgb(var(--ntrip-ink) / 0.55);
+    --marker-shadow-color: rgb(var(--ntrip-ink) / 0.22);
+
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.ntrip-map .ntrip-station-marker[data-health='healthy'] {
+    --marker-color: rgb(var(--ntrip-teal));
+    --marker-shadow-color: rgb(var(--ntrip-teal) / 0.34);
+}
+
+.ntrip-map .ntrip-station-marker[data-health='warning'] {
+    --marker-color: rgb(var(--ntrip-amber));
+    --marker-shadow-color: rgb(var(--ntrip-amber) / 0.34);
+}
+
+.ntrip-map .ntrip-station-marker[data-health='critical'] {
+    --marker-color: rgb(var(--ntrip-coral));
+    --marker-shadow-color: rgb(var(--ntrip-coral) / 0.34);
+}
+
+.ntrip-map .ntrip-station-marker[data-health='offline'] {
+    --marker-color: rgb(var(--ntrip-ink) / 0.55);
+    --marker-shadow-color: rgb(var(--ntrip-ink) / 0.22);
+}
+
+/* MapLibre owns the marker root transform; only the inner visual animates. */
+.ntrip-map .ntrip-station-marker__visual {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    border: 2px solid rgb(var(--ntrip-cloud) / 0.92);
+    border-radius: 16px;
+    background: var(--marker-color);
+    box-shadow: 0 10px 28px var(--marker-shadow-color);
+    transform: translate3d(0, 0, 0) scale(1);
+    transition:
+        transform 180ms ease,
+        border-radius 180ms ease,
+        box-shadow 180ms ease;
+}
+
+.ntrip-map .ntrip-station-marker:hover .ntrip-station-marker__visual {
+    transform: translate3d(0, -2.4px, 0) scale(1.04);
+}
+
+.ntrip-map
+    .ntrip-station-marker[data-selected='true']
+    .ntrip-station-marker__visual {
+    border-radius: 20px;
+    box-shadow:
+        0 0 0 8px rgb(var(--ntrip-cloud) / 0.32),
+        0 18px 42px rgb(var(--ntrip-ink) / 0.26);
+    transform: translate3d(0, -4px, 0) scale(1.12);
+}
+
+.ntrip-map .ntrip-station-marker__icon {
+    position: relative;
+    display: block;
+    width: 16px;
+    height: 18px;
+}
+
+.ntrip-map .ntrip-station-marker__mast {
+    position: absolute;
+    top: 1px;
+    left: 7px;
+    width: 2px;
+    height: 16px;
+    border-radius: 999px;
+    background: rgb(var(--ntrip-cloud));
+}
+
+.ntrip-map .ntrip-station-marker__wave {
+    position: absolute;
+    top: 7px;
+    left: 2px;
+    width: 12px;
+    height: 2px;
+    border-radius: 999px;
+    background: rgb(var(--ntrip-cloud));
+}
+
+.ntrip-map .ntrip-station-marker__wave--left {
+    transform: rotate(32deg);
+}
+
+.ntrip-map .ntrip-station-marker__wave--right {
+    transform: rotate(-32deg);
+}
+
+.ntrip-map .ntrip-station-marker__head {
+    position: absolute;
+    top: -1px;
+    left: 5px;
+    width: 6px;
+    height: 6px;
+    border: 2px solid rgb(var(--ntrip-cloud));
+    border-radius: 999px;
+}
+
+/* NTRIP_DASHBOARD_DENSITY_START */
+
+/*
+ * Compact density chỉ được kích hoạt trong MapDashboardLayout.
+ *
+ * Tailwind v4 tạo spacing utility dựa trên --spacing:
+ * p-4, gap-4, h-10, w-64, size-10...
+ *
+ * Các text utility sử dụng --text-*.
+ * Các rounded utility sử dụng --radius-*.
+ */
+html[data-ntrip-dashboard='true'] {
+    /*
+     * Spacing mặc định của Tailwind là 0.25rem.
+     * 0.25rem × 80% = 0.2rem.
+     */
+    --spacing: 0.2rem;
+
+    /*
+     * Radius cơ sở của shadcn:
+     * 0.625rem × 80% = 0.5rem.
+     */
+    --radius: 0.5rem;
+
+    /*
+     * Typography compact 80%.
+     */
+    --text-xs: 0.6rem;
+    --text-xs--line-height: 0.8rem;
+
+    --text-sm: 0.7rem;
+    --text-sm--line-height: 1rem;
+
+    --text-base: 0.8rem;
+    --text-base--line-height: 1.2rem;
+
+    --text-lg: 0.9rem;
+    --text-lg--line-height: 1.4rem;
+
+    --text-xl: 1rem;
+    --text-xl--line-height: 1.4rem;
+
+    --text-2xl: 1.2rem;
+    --text-2xl--line-height: 1.6rem;
+
+    --text-3xl: 1.5rem;
+    --text-3xl--line-height: 1.8rem;
+
+    --text-4xl: 1.8rem;
+    --text-4xl--line-height: 2rem;
+
+    --text-5xl: 2.4rem;
+    --text-5xl--line-height: 1;
+
+    --text-6xl: 3rem;
+    --text-6xl--line-height: 1;
+
+    --text-7xl: 3.6rem;
+    --text-7xl--line-height: 1;
+
+    --text-8xl: 4.8rem;
+    --text-8xl--line-height: 1;
+
+    --text-9xl: 6.4rem;
+    --text-9xl--line-height: 1;
+
+    /*
+     * Custom typography của NTRIP.
+     *
+     * caption: 13px → 10.4px
+     * title:   22px → 17.6px
+     */
+    --text-caption: 0.65rem;
+    --text-caption--line-height: 0.8rem;
+
+    --text-title: 1.1rem;
+    --text-title--line-height: 1.4rem;
+
+    /*
+     * Radius utility của Tailwind compact 80%.
+     */
+    --radius-xs: 0.1rem;
+    --radius-sm: 0.2rem;
+    --radius-md: 0.3rem;
+    --radius-lg: 0.4rem;
+    --radius-xl: 0.6rem;
+    --radius-2xl: 0.8rem;
+    --radius-3xl: 1.2rem;
+    --radius-4xl: 1.6rem;
+
+    /*
+     * Custom radius của NTRIP.
+     *
+     * card:  20px → 16px
+     * panel: 28px → 22.4px
+     */
+    --radius-card: 1rem;
+    --radius-panel: 1.4rem;
+}
+
+/* NTRIP_DASHBOARD_DENSITY_END */

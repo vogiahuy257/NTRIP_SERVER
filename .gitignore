@@ -1,0 +1,13 @@
+# ESP32 build output
+/ntrip_server/esp32/build/
+
+# Laravel Composer dependencies
+/ntrip_caster/vendor/
+
+# File ZIP tại thư mục gốc
+/*.zip
+
+# File ZIP trong các module, bao gồm thư mục con
+/ntrip_server/**/*.zip
+/ntrip_client/**/*.zip
+/ntrip_caster/**/*.zip

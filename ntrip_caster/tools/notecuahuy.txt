@@ -1,0 +1,53 @@
+---- setup ----
+sudo apt install php8.3-pcntl
+
+php artisan db:show
+sqlite3 database/database.sqlite ".tables"
+php artisan install:broadcasting
+
+php artisan migrate:fresh --seed
+
+npm run build
+
+---- runtime ----
+
+composer run dev
+
+php artisan reverb:start \
+    --host=0.0.0.0 \
+    --port=8080 \
+    --debug
+
+php artisan ntrip:serve
+
+---- run test ----
+
+    Terminal 1 — Laravel và frontend
+
+        cd /home/ghuy/NTRIP/NTRIP_SERVER/ntrip_caster
+        composer run dev
+
+    Terminal 2 — Reverb
+
+        cd /home/ghuy/NTRIP/NTRIP_SERVER/ntrip_caster
+
+        php artisan reverb:start \
+            --host=0.0.0.0 \
+            --port=8080 \
+            --debug
+
+    Terminal 3 — NTRIP Caster
+
+        cd /home/ghuy/NTRIP/NTRIP_SERVER/ntrip_caster
+        php artisan ntrip:serve
+
+    Terminal 4 — ESP32 simulator
+
+        cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
+        python3 tools/fake_esp32_5_stations.py
+
+------- setup labtop domain --------
+
+HOST_IP=$(ip -4 route get 1.1.1.1 | awk '{print $7; exit}')
+echo "$HOST_IP"
+
