@@ -8,6 +8,8 @@ export const NTRIP_SESSION_UPDATED_EVENT = '.ntrip.session.updated';
 
 export const NTRIP_SESSION_ENDED_EVENT = '.ntrip.session.ended';
 
+export const RTCM_FLOW_SNAPSHOT_UPDATED_EVENT = '.rtcm.flow.snapshot.updated';
+
 export const NTRIP_DASHBOARD_EVENTS: string[] = [
     STATION_TELEMETRY_UPDATED_EVENT,
     NTRIP_SESSION_STARTED_EVENT,
@@ -48,6 +50,10 @@ export type NtripSessionRealtimeEvent = {
     occurred_at: string;
 
     session: Record<string, unknown>;
+};
+
+export type RtcmFlowSnapshotUpdatedEvent = {
+    snapshot: unknown;
 };
 
 export type NtripDashboardRealtimeEvent =

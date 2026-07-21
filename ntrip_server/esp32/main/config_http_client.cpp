@@ -110,10 +110,14 @@ void ConfigHttpClient::task()
         const RuntimeConfig config =
             RuntimeConfigManager::instance().snapshot();
 
-        poll();
+        if (config.provisioned) {
+            poll();
+        }
 
         vTaskDelay(pdMS_TO_TICKS(
-            config.config_poll_interval_ms));
+            config.provisioned
+                ? config.config_poll_interval_ms
+                : 1000));
     }
 }
 
@@ -121,6 +125,10 @@ void ConfigHttpClient::poll()
 {
     const RuntimeConfig current =
         RuntimeConfigManager::instance().snapshot();
+
+    if (!current.provisioned) {
+        return;
+    }
 
     char url[320]{};
 
@@ -131,7 +139,7 @@ void ConfigHttpClient::poll()
         current.caster_host,
         current.management_port,
         app_defaults::CONFIG_PATH_PREFIX,
-        app_defaults::DEVICE_ID,
+        current.device_id,
         static_cast<unsigned long>(current.revision));
 
     ResponseBuffer response{};
@@ -153,7 +161,11 @@ void ConfigHttpClient::poll()
     esp_http_client_set_header(
         client,
         "X-Device-ID",
-        app_defaults::DEVICE_ID);
+        current.device_id);
+    esp_http_client_set_header(
+        client,
+        "X-Hardware-ID",
+        current.hardware_id);
     set_authorization(client, current.auth_token);
 
     const esp_err_t result =
@@ -215,8 +227,14 @@ bool ConfigHttpClient::parse_and_apply(const char* json)
         updated.enabled = cJSON_IsTrue(enabled);
     }
 
+    /*
+     * The server may rename the logical device ID or mountpoint.
+     * The new values are stored in NVS and become active after restart.
+     */
+    copy_if_present(root, "device_id", updated.device_id);
     copy_if_present(root, "caster_host", updated.caster_host);
     copy_if_present(root, "mountpoint", updated.mountpoint);
+    copy_if_present(root, "source_token", updated.auth_token);
     copy_if_present(root, "auth_token", updated.auth_token);
 
     cJSON* value = nullptr;

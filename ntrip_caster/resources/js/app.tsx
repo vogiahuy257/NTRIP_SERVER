@@ -1,13 +1,13 @@
 import { createInertiaApp } from '@inertiajs/react';
+import { configureEcho } from '@laravel/echo-react';
+
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
-import { configureEcho } from '@laravel/echo-react';
-
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
-import SettingsLayout from '@/layouts/settings/layout';
 import MapDashboardLayout from '@/layouts/map-dashboard-layout';
+import SettingsLayout from '@/layouts/settings/layout';
 
 configureEcho({
     broadcaster: 'reverb',
@@ -21,6 +21,7 @@ const MAP_DASHBOARD_PAGE_PREFIXES = [
     'mountpoints',
     'rtcm',
     'sessions',
+    'system',
 ] as const;
 
 function usesMapDashboardLayout(name: string): boolean {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreStationRequest;
 use App\Http\Requests\UpdateStationRequest;
+use App\Models\Mountpoint;
 use App\Models\Station;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -54,9 +55,12 @@ class StationController extends Controller
                     'max_rtcm_age_ms' => $data['max_rtcm_age_ms'] ?? 1500,
                 ]);
 
-                $station->mountpoint()->create([
+                $station->mountpoints()->create([
                     'name' => $data['mountpoint'],
                     'identifier' => $station->name,
+                    'enabled' => true,
+                    'is_primary' => true,
+                    'access_mode' => Mountpoint::ACCESS_PUBLIC,
                 ]);
 
                 return $station->load([

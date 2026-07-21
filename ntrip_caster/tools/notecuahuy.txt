@@ -46,8 +46,16 @@ php artisan ntrip:serve
         cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
         python3 tools/fake_esp32_5_stations.py
 
+------- Unit test ------------------
+
+composer test:backend
+
 ------- setup labtop domain --------
 
 HOST_IP=$(ip -4 route get 1.1.1.1 | awk '{print $7; exit}')
 echo "$HOST_IP"
 
+
+------ debug server -----
+
+php artisan ntrip:observe --debug

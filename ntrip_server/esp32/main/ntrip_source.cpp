@@ -1,164 +1,395 @@
 #include "ntrip_source.hpp"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+
 #include "app_defaults.hpp"
+#include "esp_log.h"
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "lwip/netdb.h"
 #include "lwip/sockets.h"
 #include "network_manager.hpp"
 #include "station_state.hpp"
+
+namespace
+{
+constexpr char TAG[] = "NTRIP_SOURCE";
+}
+
 esp_err_t NtripSource::initialize()
 {
-    q_ = xQueueCreate(app_defaults::RTCM_QUEUE_LENGTH, sizeof(RtcmFrame));
-    if (!q_)
+    q_ = xQueueCreate(
+        app_defaults::RTCM_QUEUE_LENGTH,
+        sizeof(RtcmFrame));
+
+    if (q_ == nullptr) {
         return ESP_ERR_NO_MEM;
-    return xTaskCreate(&NtripSource::entry, "ntrip_source", 6144, this, 7, nullptr) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+    }
+
+    return xTaskCreate(
+               &NtripSource::entry,
+               "ntrip_source",
+               6144,
+               this,
+               7,
+               nullptr) == pdPASS
+        ? ESP_OK
+        : ESP_ERR_NO_MEM;
 }
-bool NtripSource::enqueue(const RtcmFrame &f)
+
+bool NtripSource::enqueue(const RtcmFrame &frame)
 {
-    cache(f);
-    if (xQueueSend(q_, &f, 0) == pdTRUE)
+    cache(frame);
+
+    if (xQueueSend(q_, &frame, 0) == pdTRUE) {
         return true;
+    }
+
     StationState::instance().queue_drops++;
     return false;
 }
-void NtripSource::entry(void *x) { ((NtripSource *)x)->task(); }
+
+void NtripSource::entry(void *context)
+{
+    static_cast<NtripSource *>(context)->task();
+}
+
 void NtripSource::task()
 {
-    auto &s = StationState::instance();
-    uint32_t r = app_defaults::RETRY_MIN_MS;
-    while (true)
-    {
+    auto &state = StationState::instance();
+    uint32_t retry_ms = app_defaults::RETRY_MIN_MS;
+
+    while (true) {
         network_manager::wait_connected();
-        auto c = RuntimeConfigManager::instance().snapshot();
-        if (!c.enabled)
-        {
-            s.source_connected = false;
+
+        const RuntimeConfig config =
+            RuntimeConfigManager::instance().snapshot();
+
+        if (!config.enabled) {
+            state.source_connected = false;
             xQueueReset(q_);
             vTaskDelay(pdMS_TO_TICKS(1000));
             continue;
         }
-        int fd = connect_socket(c);
-        if (fd < 0 || !handshake(fd, c))
-        {
-            if (fd >= 0)
-                close(fd);
-            uint32_t d = r + esp_random() % app_defaults::RETRY_JITTER_MS;
-            vTaskDelay(pdMS_TO_TICKS(d));
-            r = std::min(r * 2, app_defaults::RETRY_MAX_MS);
-            continue;
-        }
-        r = app_defaults::RETRY_MIN_MS;
-        s.source_connected = true;
-        xQueueReset(q_);
-        if (!send_cache(fd))
-        {
-            s.source_connected = false;
-            close(fd);
-            continue;
-        }
-        RtcmFrame f{};
-        while (network_manager::connected())
-        {
-            auto now = RuntimeConfigManager::instance().snapshot();
-            if (!now.enabled || now.revision != c.revision)
-                break;
-            if (xQueueReceive(q_, &f, pdMS_TO_TICKS(1000)) != pdTRUE)
-                continue;
-            if (esp_timer_get_time() - f.received_us > (int64_t)now.max_rtcm_age_ms * 1000)
-            {
-                s.stale_drops++;
+
+        const int socket_fd = connect_socket(config);
+
+        if (socket_fd < 0 || !handshake(socket_fd, config)) {
+            if (socket_fd >= 0) {
+                close(socket_fd);
+            }
+
+            /*
+             * Before provisioning, retry at the discovery interval so the
+             * Caster can keep pending_devices.last_seen_at up to date.
+             */
+            if (!config.provisioned) {
+                retry_ms = app_defaults::RETRY_MIN_MS;
+                vTaskDelay(pdMS_TO_TICKS(
+                    config.provisioning_poll_interval_ms));
                 continue;
             }
-            if (!write_all(fd, f.data.data(), f.length))
-                break;
-            s.bytes_sent += f.length;
-        }
-        s.source_connected = false;
-        shutdown(fd, SHUT_RDWR);
-        close(fd);
-    }
-}
-int NtripSource::connect_socket(const RuntimeConfig &c)
-{
-    char p[8];
-    std::snprintf(p, sizeof(p), "%u", c.caster_port);
-    addrinfo h{};
-    h.ai_family = AF_INET;
-    h.ai_socktype = SOCK_STREAM;
-    h.ai_protocol = IPPROTO_TCP;
-    addrinfo *r = nullptr;
-    if (getaddrinfo(c.caster_host, p, &h, &r) != 0 || !r)
-        return -1;
-    int fd = -1;
-    for (auto *i = r; i; i = i->ai_next)
-    {
-        fd = socket(i->ai_family, i->ai_socktype, i->ai_protocol);
-        if (fd < 0)
+
+            const uint32_t jitter =
+                esp_random() % app_defaults::RETRY_JITTER_MS;
+
+            vTaskDelay(pdMS_TO_TICKS(retry_ms + jitter));
+            retry_ms = std::min(
+                retry_ms * 2,
+                app_defaults::RETRY_MAX_MS);
             continue;
-        int on = 1;
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
-        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-        timeval t{5, 0};
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &t, sizeof(t));
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &t, sizeof(t));
-        if (connect(fd, i->ai_addr, i->ai_addrlen) == 0)
-            break;
-        close(fd);
-        fd = -1;
+        }
+
+        retry_ms = app_defaults::RETRY_MIN_MS;
+        state.source_connected = true;
+        xQueueReset(q_);
+
+        if (!send_cache(socket_fd)) {
+            state.source_connected = false;
+            close(socket_fd);
+            continue;
+        }
+
+        RtcmFrame frame{};
+
+        while (network_manager::connected()) {
+            const RuntimeConfig current =
+                RuntimeConfigManager::instance().snapshot();
+
+            if (
+                !current.enabled ||
+                !current.provisioned ||
+                current.revision != config.revision) {
+                break;
+            }
+
+            if (
+                xQueueReceive(
+                    q_,
+                    &frame,
+                    pdMS_TO_TICKS(1000)) != pdTRUE) {
+                continue;
+            }
+
+            const int64_t age_us =
+                esp_timer_get_time() - frame.received_us;
+
+            if (
+                age_us >
+                static_cast<int64_t>(current.max_rtcm_age_ms) * 1000) {
+                state.stale_drops++;
+                continue;
+            }
+
+            if (!write_all(
+                    socket_fd,
+                    frame.data.data(),
+                    frame.length)) {
+                break;
+            }
+
+            state.bytes_sent += frame.length;
+        }
+
+        state.source_connected = false;
+        shutdown(socket_fd, SHUT_RDWR);
+        close(socket_fd);
     }
-    freeaddrinfo(r);
-    return fd;
 }
-bool NtripSource::handshake(int fd, const RuntimeConfig &c)
+
+int NtripSource::connect_socket(const RuntimeConfig &config)
 {
-    char q[768];
-    int n = std::snprintf(q, sizeof(q), "POST %s%s HTTP/1.1\r\nHost: %s:%u\r\nUser-Agent: ESP32-NTRIP/%s\r\nContent-Type: gnss/data\r\nConnection: keep-alive\r\nX-Device-ID: %s\r\nX-Mountpoint: %s\r\nAuthorization: Bearer %s\r\n\r\n", app_defaults::SOURCE_PATH_PREFIX, c.mountpoint, c.caster_host, c.caster_port, app_defaults::FIRMWARE_VERSION, app_defaults::DEVICE_ID, c.mountpoint, c.auth_token);
-    if (n <= 0 || !write_all(fd, q, n))
+    char port[8]{};
+    std::snprintf(
+        port,
+        sizeof(port),
+        "%u",
+        config.caster_port);
+
+    addrinfo hints{};
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+
+    addrinfo *results = nullptr;
+
+    if (
+        getaddrinfo(
+            config.caster_host,
+            port,
+            &hints,
+            &results) != 0 ||
+        results == nullptr) {
+        return -1;
+    }
+
+    int socket_fd = -1;
+
+    for (addrinfo *item = results; item != nullptr; item = item->ai_next) {
+        socket_fd = socket(
+            item->ai_family,
+            item->ai_socktype,
+            item->ai_protocol);
+
+        if (socket_fd < 0) {
+            continue;
+        }
+
+        int enabled = 1;
+        setsockopt(
+            socket_fd,
+            IPPROTO_TCP,
+            TCP_NODELAY,
+            &enabled,
+            sizeof(enabled));
+        setsockopt(
+            socket_fd,
+            SOL_SOCKET,
+            SO_KEEPALIVE,
+            &enabled,
+            sizeof(enabled));
+
+        timeval timeout{5, 0};
+        setsockopt(
+            socket_fd,
+            SOL_SOCKET,
+            SO_SNDTIMEO,
+            &timeout,
+            sizeof(timeout));
+        setsockopt(
+            socket_fd,
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            &timeout,
+            sizeof(timeout));
+
+        if (
+            connect(
+                socket_fd,
+                item->ai_addr,
+                item->ai_addrlen) == 0) {
+            break;
+        }
+
+        close(socket_fd);
+        socket_fd = -1;
+    }
+
+    freeaddrinfo(results);
+    return socket_fd;
+}
+
+bool NtripSource::handshake(
+    const int socket_fd,
+    const RuntimeConfig &config)
+{
+    const char *provisioning_state =
+        config.provisioned ? "provisioned" : "bootstrap";
+
+    char request[1024]{};
+
+    const int request_length = std::snprintf(
+        request,
+        sizeof(request),
+        "POST %s%s HTTP/1.1\r\n"
+        "Host: %s:%u\r\n"
+        "User-Agent: ESP32-NTRIP/%s\r\n"
+        "Content-Type: gnss/data\r\n"
+        "Connection: keep-alive\r\n"
+        "X-Hardware-ID: %s\r\n"
+        "X-Device-ID: %s\r\n"
+        "X-Mountpoint: %s\r\n"
+        "X-Firmware-Version: %s\r\n"
+        "X-Provisioning-State: %s\r\n"
+        "Authorization: Bearer %s\r\n"
+        "\r\n",
+        app_defaults::SOURCE_PATH_PREFIX,
+        config.mountpoint,
+        config.caster_host,
+        config.caster_port,
+        app_defaults::FIRMWARE_VERSION,
+        config.hardware_id,
+        config.device_id,
+        config.mountpoint,
+        app_defaults::FIRMWARE_VERSION,
+        provisioning_state,
+        config.auth_token);
+
+    if (
+        request_length <= 0 ||
+        request_length >= static_cast<int>(sizeof(request)) ||
+        !write_all(
+            socket_fd,
+            request,
+            static_cast<std::size_t>(request_length))) {
         return false;
-    char r[384]{};
-    size_t u = 0;
-    while (u + 1 < sizeof(r))
-    {
-        int k = recv(fd, r + u, sizeof(r) - u - 1, 0);
-        if (k <= 0)
+    }
+
+    char response[512]{};
+    std::size_t used = 0;
+
+    while (used + 1 < sizeof(response)) {
+        const int received = recv(
+            socket_fd,
+            response + used,
+            sizeof(response) - used - 1,
+            0);
+
+        if (received <= 0) {
             return false;
-        u += k;
-        r[u] = 0;
-        if (std::strstr(r, "\r\n\r\n"))
+        }
+
+        used += static_cast<std::size_t>(received);
+        response[used] = '\0';
+
+        if (std::strstr(response, "\r\n\r\n") != nullptr) {
             break;
+        }
     }
-    return std::strstr(r, " 200 ");
+
+    if (std::strstr(response, " 200 ") != nullptr) {
+        ESP_LOGI(
+            TAG,
+            "Source accepted: device=%s mountpoint=%s",
+            config.device_id,
+            config.mountpoint);
+        return true;
+    }
+
+    if (std::strstr(response, "DEVICE_PENDING") != nullptr) {
+        ESP_LOGI(
+            TAG,
+            "Device pending approval: hardware_id=%s",
+            config.hardware_id);
+    } else if (std::strstr(response, "DEVICE_REJECTED") != nullptr) {
+        ESP_LOGW(
+            TAG,
+            "Device rejected: hardware_id=%s",
+            config.hardware_id);
+    } else {
+        ESP_LOGW(TAG, "Source handshake rejected: %s", response);
+    }
+
+    return false;
 }
-bool NtripSource::write_all(int fd, const void *d, size_t n)
+
+bool NtripSource::write_all(
+    const int socket_fd,
+    const void *data,
+    std::size_t length)
 {
-    auto *p = (const uint8_t *)d;
-    while (n)
-    {
-        int k = send(fd, p, n, 0);
-        if (k <= 0)
+    const auto *cursor = static_cast<const uint8_t *>(data);
+
+    while (length > 0) {
+        const int sent = send(socket_fd, cursor, length, 0);
+
+        if (sent <= 0) {
             return false;
-        p += k;
-        n -= k;
+        }
+
+        cursor += sent;
+        length -= static_cast<std::size_t>(sent);
     }
+
     return true;
 }
-int NtripSource::cache_index(uint16_t t) { return (t == 1005 || t == 1006) ? 0 : t == 1033 ? 1
-                                                                             : t == 1230   ? 2
-                                                                             : t == 4072   ? 3
-                                                                                           : -1; }
-void NtripSource::cache(const RtcmFrame &f)
+
+int NtripSource::cache_index(const uint16_t type)
 {
-    int i = cache_index(f.type);
-    if (i >= 0)
-        c_[i] = {f, true};
+    return (type == 1005 || type == 1006)
+        ? 0
+        : type == 1033
+        ? 1
+        : type == 1230
+        ? 2
+        : type == 4072
+        ? 3
+        : -1;
 }
-bool NtripSource::send_cache(int fd)
+
+void NtripSource::cache(const RtcmFrame &frame)
 {
-    for (auto &i : c_)
-        if (i.valid && !write_all(fd, i.f.data.data(), i.f.length))
+    const int index = cache_index(frame.type);
+
+    if (index >= 0) {
+        c_[index] = {frame, true};
+    }
+}
+
+bool NtripSource::send_cache(const int socket_fd)
+{
+    for (const Cache &item : c_) {
+        if (
+            item.valid &&
+            !write_all(
+                socket_fd,
+                item.f.data.data(),
+                item.f.length)) {
             return false;
+        }
+    }
+
     return true;
 }

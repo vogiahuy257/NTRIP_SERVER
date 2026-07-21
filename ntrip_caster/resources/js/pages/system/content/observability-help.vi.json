@@ -1,0 +1,269 @@
+{
+    "page_overview": {
+        "title": "Tổng quan trang System Observability",
+        "summary": "Trang này theo dõi toàn bộ đường đi của dữ liệu hiệu chỉnh RTCM từ trạm BASE, qua NTRIP Caster, đến từng Rover đang kết nối.",
+        "purpose": "Mục tiêu là xác định nhanh dữ liệu đang bị thiếu ở nguồn BASE, bị nghẽn trong quá trình fan-out của Caster, hay bị chậm tại socket của một Rover cụ thể.",
+        "howToRead": [
+            "Ưu tiên kiểm tra trạng thái realtime ở góc trên bên phải.",
+            "Chọn đúng Mountpoint trước khi đọc số liệu.",
+            "So sánh Source, Expected, Queued và Written để biết dữ liệu bị mất ở đoạn nào.",
+            "Mở phần Rover realtime để xác định session gây backlog."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Các ngưỡng Warning và Critical là giá trị khởi đầu, cần hiệu chỉnh lại sau field test.",
+            "Khi dữ liệu hiển thị Stale, không nên dùng snapshot đó để kết luận tình trạng hiện tại."
+        ]
+    },
+    "filters": {
+        "title": "Bộ lọc dữ liệu",
+        "summary": "Bộ lọc quyết định Mountpoint và khoảng dữ liệu lịch sử được dùng cho các biểu đồ.",
+        "purpose": "Giúp người vận hành chuyển nhanh giữa các luồng RTCM và chọn độ chi tiết phù hợp với khoảng thời gian cần phân tích.",
+        "howToRead": [
+            "Mountpoint chọn luồng RTCM cần theo dõi.",
+            "Time range xác định khoảng lịch sử được tải.",
+            "Automatic ưu tiên dữ liệu 5 giây cho khoảng ngắn và rollup 1 phút cho khoảng dài.",
+            "Nút Refresh tải lại snapshot hiện tại và history của bộ lọc đang chọn."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Detail có độ phân giải cao nhưng chỉ được giữ trong thời gian retention ngắn.",
+            "Minute phù hợp để xem xu hướng nhiều giờ hoặc nhiều ngày."
+        ]
+    },
+    "metric_source_rate": {
+        "title": "Source rate",
+        "summary": "Tốc độ dữ liệu RTCM mà Caster đang nhận trực tiếp từ BASE, tính theo byte mỗi giây.",
+        "purpose": "Cho biết BASE có đang thực sự phát dữ liệu hay chỉ còn kết nối TCP nhưng không có payload RTCM mới.",
+        "howToRead": [
+            "Giá trị ổn định lớn hơn 0 cho thấy nguồn đang hoạt động.",
+            "Giá trị bằng 0 trong nhiều chu kỳ cần đối chiếu Source freshness và trạng thái kết nối.",
+            "Biến động phụ thuộc cấu hình bản tin RTCM và tần số phát của BASE."
+        ],
+        "thresholds": [
+            {
+                "label": "Warning",
+                "value": "0 B/s khi source vẫn connected",
+                "meaning": "Có kết nối nhưng không nhận được RTCM trong chu kỳ hiện tại."
+            }
+        ],
+        "notes": [
+            "Không nên đặt một ngưỡng bitrate cố định cho mọi trạm BASE vì bộ bản tin RTCM có thể khác nhau."
+        ]
+    },
+    "metric_active_rovers": {
+        "title": "Active Rovers",
+        "summary": "Số session Rover đang nhận dữ liệu từ Mountpoint được chọn.",
+        "purpose": "Đây là hệ số tải fan-out chính của Caster vì mỗi chunk RTCM phải được phân phối đến tất cả Rover đang hoạt động.",
+        "howToRead": [
+            "Expected egress thường xấp xỉ Source rate nhân với số Rover đang hoạt động.",
+            "Nếu Active Rovers bằng 0 thì các chỉ số fan-out và drain có thể không mang ý nghĩa lỗi.",
+            "Khi số Rover tăng, cần theo dõi fan-out latency và backlog."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Số lượng Rover cao không tự động đồng nghĩa hệ thống quá tải; cần kết hợp latency, coverage và buffer."
+        ]
+    },
+    "metric_socket_drain": {
+        "title": "Socket drain",
+        "summary": "Tỷ lệ dữ liệu đã ghi thành công ra socket Rover so với tổng lượng dữ liệu dự kiến phải fan-out.",
+        "purpose": "Đánh giá Caster có đưa được dữ liệu ra mạng nhanh bằng tốc độ dữ liệu được tạo ra hay không.",
+        "howToRead": [
+            "Gần 100% là trạng thái tốt.",
+            "Giảm ngắn hạn có thể xuất hiện do nonblocking socket và sẽ tự hồi phục nếu buffer được drain sau đó.",
+            "Giảm kéo dài cùng backlog tăng cho thấy Rover hoặc đường truyền đang chậm."
+        ],
+        "thresholds": [
+            {
+                "label": "Healthy",
+                "value": ">= 98%",
+                "meaning": "Dữ liệu được ghi ra socket gần bằng lưu lượng dự kiến."
+            },
+            {
+                "label": "Warning",
+                "value": "90% đến dưới 98%",
+                "meaning": "Socket bắt đầu drain chậm hơn tốc độ fan-out."
+            },
+            {
+                "label": "Critical",
+                "value": "< 90%",
+                "meaning": "Một phần đáng kể dữ liệu dự kiến chưa được ghi ra socket."
+            }
+        ],
+        "notes": [
+            "Cần đọc cùng Backlog, Buffer age và Write failures để xác định mức độ nghiêm trọng."
+        ]
+    },
+    "metric_oldest_buffer": {
+        "title": "Oldest buffer",
+        "summary": "Tuổi của dữ liệu RTCM lâu nhất còn nằm trong output buffer của bất kỳ Rover nào trên Mountpoint.",
+        "purpose": "Phát hiện Rover chậm trước khi buffer tăng quá lớn hoặc dữ liệu hiệu chỉnh trở nên lỗi thời.",
+        "howToRead": [
+            "0 ms hoặc rất thấp cho thấy dữ liệu được ghi gần như ngay lập tức.",
+            "Giá trị tăng liên tục cho thấy một Rover không theo kịp tốc độ RTCM.",
+            "Mở Rover realtime details để tìm session có Current age cao nhất."
+        ],
+        "thresholds": [
+            {
+                "label": "Quan sát",
+                "value": ">= một chu kỳ snapshot",
+                "meaning": "Dữ liệu đã tồn tại trong buffer lâu hơn chu kỳ đo hiện tại."
+            },
+            {
+                "label": "Critical",
+                "value": ">= max(2000 ms, 3 chu kỳ snapshot)",
+                "meaning": "Rover output bị chậm nghiêm trọng."
+            }
+        ],
+        "notes": [
+            "Ngưỡng cuối cùng cần được tune theo tần số RTCM và độ trễ mạng thực tế."
+        ]
+    },
+    "chart_throughput": {
+        "title": "Biểu đồ RTCM throughput",
+        "summary": "So sánh bốn tầng lưu lượng: dữ liệu nhận từ BASE, lưu lượng dự kiến, dữ liệu đã đưa vào buffer Rover và dữ liệu đã ghi ra socket.",
+        "purpose": "Xác định chính xác đoạn nào trong BASE → Caster → Rover bắt đầu mất cân bằng.",
+        "howToRead": [
+            "Source là bitrate đầu vào từ BASE.",
+            "Expected thường bằng Source nhân số Rover đang hoạt động.",
+            "Queued cho biết Caster đã đưa bao nhiêu byte vào output buffer.",
+            "Written cho biết bao nhiêu byte đã thực sự được ghi ra socket.",
+            "Expected cao hơn Queued kéo dài gợi ý nghẽn fan-out; Queued cao hơn Written kéo dài gợi ý nghẽn socket Rover."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Một khoảng lệch ngắn giữa Queued và Written là bình thường với nonblocking socket.",
+            "Cần quan sát xu hướng kéo dài thay vì chỉ một điểm đơn lẻ."
+        ]
+    },
+    "diagnosis": {
+        "title": "Bottleneck diagnosis",
+        "summary": "Bộ luật realtime phân loại tình trạng theo ba vị trí: BASE input, Caster fan-out và Rover sockets.",
+        "purpose": "Rút ngắn thời gian khoanh vùng lỗi mà không cần đọc đồng thời tất cả metric thô.",
+        "howToRead": [
+            "BASE Critical thường liên quan source disconnect hoặc RTCM không còn mới.",
+            "Caster Warning/Critical thường liên quan fan-out coverage hoặc fan-out latency.",
+            "Rover Warning/Critical thường liên quan drain ratio, buffer age, zero write hoặc write failure.",
+            "Luôn mở biểu đồ và Rover details để xác nhận kết luận tự động."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Đây là hệ thống hỗ trợ chẩn đoán, không thay thế hoàn toàn đánh giá của kỹ sư vận hành."
+        ]
+    },
+    "chart_coverage_drain": {
+        "title": "Coverage and drain",
+        "summary": "Fan-out coverage đo lượng byte đã queue so với expected; socket drain đo lượng byte đã written so với expected.",
+        "purpose": "Tách nghẽn bên trong Caster khỏi nghẽn ở socket hoặc đường truyền Rover.",
+        "howToRead": [
+            "Coverage giảm nhưng Drain giảm theo: vấn đề có thể bắt đầu tại fan-out.",
+            "Coverage gần 100% nhưng Drain thấp: Caster queue đủ dữ liệu nhưng Rover socket không drain kịp.",
+            "Cả hai gần 100%: đường dữ liệu đang cân bằng."
+        ],
+        "thresholds": [
+            {
+                "label": "Mục tiêu",
+                "value": ">= 98%",
+                "meaning": "Sai lệch nhỏ và thường chấp nhận được."
+            },
+            {
+                "label": "Critical",
+                "value": "< 90%",
+                "meaning": "Mất cân bằng lưu lượng rõ rệt."
+            }
+        ],
+        "notes": []
+    },
+    "chart_fanout_latency": {
+        "title": "Fan-out latency",
+        "summary": "Thời gian Caster cần để phân phối một chunk RTCM đến danh sách Rover của Mountpoint.",
+        "purpose": "Phát hiện vòng fan-out ngày càng tốn thời gian khi số Rover hoặc áp lực socket tăng.",
+        "howToRead": [
+            "Average phản ánh tải thông thường.",
+            "P95 phản ánh 5% chu kỳ chậm nhất và thường hữu ích hơn Average để phát hiện spike.",
+            "Maximum cho biết trường hợp xấu nhất trong khoảng đo.",
+            "P95 tăng theo số Rover có thể cho thấy khả năng mở rộng đang đạt giới hạn."
+        ],
+        "thresholds": [
+            {
+                "label": "Warning khởi đầu",
+                "value": ">= max(50 ms, 25% chu kỳ snapshot)",
+                "meaning": "Fan-out bắt đầu chiếm phần đáng kể của chu kỳ xử lý."
+            },
+            {
+                "label": "Critical khởi đầu",
+                "value": ">= max(250 ms, 75% chu kỳ snapshot)",
+                "meaning": "Fan-out có nguy cơ làm chậm toàn bộ pipeline."
+            }
+        ],
+        "notes": ["Ngưỡng này cần tune bằng load test với số Rover mục tiêu."]
+    },
+    "chart_backlog_buffer": {
+        "title": "Backlog and buffer age",
+        "summary": "Backlog là số byte chưa ghi xong; Buffer age là thời gian dữ liệu lâu nhất đã chờ trong buffer.",
+        "purpose": "Phân biệt backlog tạm thời với backlog kéo dài có khả năng làm RTCM lỗi thời.",
+        "howToRead": [
+            "Backlog tăng rồi trở về 0 nhanh thường là hành vi bình thường.",
+            "Backlog tăng cùng Buffer age tăng liên tục là dấu hiệu Rover chậm.",
+            "Buffer age quan trọng hơn chỉ số byte khi đánh giá độ mới của correction data."
+        ],
+        "thresholds": [],
+        "notes": [
+            "Mở danh sách Rover để xác định session có buffer age cao nhất."
+        ]
+    },
+    "chart_socket_writes": {
+        "title": "Socket write events",
+        "summary": "Thống kê partial write, zero-byte write và write failure trong từng khoảng đo.",
+        "purpose": "Cho biết socket nonblocking đang gặp backpressure nhẹ hay lỗi ghi nghiêm trọng.",
+        "howToRead": [
+            "Partial write nghĩa là chỉ một phần buffer được ghi trong lần gọi hiện tại.",
+            "Zero write nghĩa là socket tạm thời không chấp nhận thêm byte.",
+            "Write failure là lỗi nghiêm trọng và thường dẫn đến đóng session hoặc mất dữ liệu."
+        ],
+        "thresholds": [
+            {
+                "label": "Warning",
+                "value": "Zero write > 0 hoặc partial write lặp lại cùng backlog",
+                "meaning": "Socket đang chịu backpressure."
+            },
+            {
+                "label": "Critical",
+                "value": "Write failure > 0",
+                "meaning": "Đã xảy ra lỗi ghi socket thực tế."
+            }
+        ],
+        "notes": [
+            "Partial write đơn lẻ không nhất thiết là lỗi nếu buffer được drain ngay sau đó."
+        ]
+    },
+    "rover_details": {
+        "title": "Rover realtime details",
+        "summary": "Hiển thị số liệu realtime cho từng session Rover để xác định chính xác client nào gây backlog.",
+        "purpose": "Chuyển từ chẩn đoán tổng quát theo Mountpoint sang khoanh vùng một Rover cụ thể.",
+        "howToRead": [
+            "Queued rate là tốc độ Caster đưa byte vào buffer của Rover.",
+            "Written rate là tốc độ socket thực sự gửi được.",
+            "Current buffer và Current age phản ánh backlog hiện tại.",
+            "Maximum buffer và Maximum age cho biết trường hợp xấu nhất trong chu kỳ.",
+            "Last socket write cho biết lần ghi thành công gần nhất.",
+            "Các Rover Warning hoặc Critical được xếp lên đầu."
+        ],
+        "thresholds": [
+            {
+                "label": "Warning",
+                "value": "Current age cao, zero write, partial write hoặc Written < Queued",
+                "meaning": "Rover bắt đầu drain chậm."
+            },
+            {
+                "label": "Critical",
+                "value": "Write failure hoặc không có successful write trong thời gian dài",
+                "meaning": "Session có nguy cơ mất correction data hoặc bị ngắt."
+            }
+        ],
+        "notes": [
+            "Session ID dùng để đối chiếu với NTRIP Sessions và log backend."
+        ]
+    }
+}

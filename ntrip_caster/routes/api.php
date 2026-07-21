@@ -2,10 +2,14 @@
 
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\DashboardSnapshotController;
+use App\Http\Controllers\Api\DeviceProvisioningController;
 use App\Http\Controllers\Api\MountpointController;
 use App\Http\Controllers\Api\NtripSessionController;
+use App\Http\Controllers\Api\PendingDeviceController;
 use App\Http\Controllers\Api\RoverAccountController;
 use App\Http\Controllers\Api\RoverAccountMountpointController;
+use App\Http\Controllers\Api\RtcmFlowHistoryController;
+use App\Http\Controllers\Api\RtcmFlowSnapshotController;
 use App\Http\Controllers\Api\StationConfigController;
 use App\Http\Controllers\Api\StationController;
 use App\Http\Controllers\Api\StationTelemetryController;
@@ -23,6 +27,15 @@ Route::get('/health', function (): JsonResponse {
 });
 
 Route::prefix('v1')->group(function (): void {
+
+    /*
+     * Public endpoint để ESP32 kiểm tra trạng thái
+     * và tải cấu hình sau khi được duyệt.
+     */
+    Route::get(
+        'device-provisioning/{hardwareId}',
+        DeviceProvisioningController::class,
+    )->name('device-provisioning.show');
 
     // system status
     Route::get(
@@ -69,6 +82,39 @@ Route::prefix('v1')->group(function (): void {
 
     // rover accounts
     Route::middleware(['auth:sanctum', 'verified'])->group(function (): void {
+
+        Route::get(
+            'observability/rtcm-flow/snapshot',
+            RtcmFlowSnapshotController::class,
+        )->name(
+            'observability.rtcm-flow.snapshot',
+        );
+        Route::get(
+            'observability/rtcm-flow/history',
+            RtcmFlowHistoryController::class,
+        )->name(
+            'observability.rtcm-flow.history',
+        );
+
+        Route::get(
+            'pending-devices',
+            [PendingDeviceController::class, 'index'],
+        )->name('pending-devices.index');
+
+        Route::get(
+            'pending-devices/{pendingDevice}',
+            [PendingDeviceController::class, 'show'],
+        )->name('pending-devices.show');
+
+        Route::post(
+            'pending-devices/{pendingDevice}/approve',
+            [PendingDeviceController::class, 'approve'],
+        )->name('pending-devices.approve');
+
+        Route::post(
+            'pending-devices/{pendingDevice}/reject',
+            [PendingDeviceController::class, 'reject'],
+        )->name('pending-devices.reject');
 
         Route::get(
             'alerts',

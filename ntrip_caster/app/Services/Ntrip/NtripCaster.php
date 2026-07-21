@@ -2,12 +2,18 @@
 
 namespace App\Services\Ntrip;
 
+use App\Contracts\Observability\RtcmFlowMetricsSink;
 use App\Enums\Ntrip\RoverAuthenticationCode;
 use App\Models\Mountpoint;
 use App\Models\Station;
+use App\Services\Devices\PendingDeviceProvisioningService;
 use App\Services\Ntrip\Auth\RoverConnectionService;
+use App\Services\Ntrip\Devices\SourceDeviceDiscoveryOutcome;
+use App\Services\Ntrip\Devices\SourceDeviceDiscoveryService;
 use App\Services\Ntrip\Sessions\NtripSessionService;
 use Illuminate\Support\Facades\Hash;
+use InvalidArgumentException;
+use LogicException;
 use RuntimeException;
 use Throwable;
 
@@ -24,7 +30,15 @@ class NtripCaster
      *     state: string,
      *     input_buffer: string,
      *     output_buffer: string,
+     *     output_protocol_bytes: int,
+     *     rtcm_output_buffer_bytes: int,
+     *     rtcm_output_segments: list<array{
+     *         bytes: int,
+     *         queued_at_ns: int
+     *     }>,
      *     mountpoint: ?string,
+     *     mountpoint_id: ?int,
+     *     pending_device_id: ?int,
      *     station_id: ?int,
      *     rover_account_id: ?int,
      *     authenticated_username: ?string,
@@ -56,6 +70,9 @@ class NtripCaster
     public function __construct(
         private readonly RoverConnectionService $roverConnections,
         private readonly NtripSessionService $sessions,
+        private readonly SourceDeviceDiscoveryService $sourceDeviceDiscovery,
+        private readonly PendingDeviceProvisioningService $deviceProvisioning,
+        private readonly RtcmFlowMetricsSink $flowMetrics,
     ) {}
 
     public function run(callable $logger): void
@@ -72,25 +89,30 @@ class NtripCaster
         $errorCode = 0;
         $errorMessage = '';
 
-        $this->serverSocket = @stream_socket_server(
+        $serverSocket = @stream_socket_server(
             $address,
             $errorCode,
             $errorMessage,
-            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN
+            STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
         );
 
-        if ($this->serverSocket === false) {
+        if ($serverSocket === false) {
             throw new RuntimeException(
                 sprintf(
                     'Cannot start NTRIP caster on %s: %s (%d)',
                     $address,
                     $errorMessage,
-                    $errorCode
-                )
+                    $errorCode,
+                ),
             );
         }
 
-        stream_set_blocking($this->serverSocket, false);
+        stream_set_blocking(
+            $serverSocket,
+            false,
+        );
+
+        $this->serverSocket = $serverSocket;
 
         $logger("NTRIP caster listening on {$address}");
 
@@ -156,6 +178,12 @@ class NtripCaster
 
             $this->closeTimedOutClients($logger);
             $this->flushActiveSessionStats();
+
+            $nowNs = $this->monotonicNowNs();
+
+            $this->observeAllRoverOutputBuffers($nowNs);
+
+            $this->flowMetrics->tick($nowNs);
         }
         $this->shutdown($logger);
     }
@@ -239,8 +267,13 @@ class NtripCaster
             'state' => 'headers',
             'input_buffer' => '',
             'output_buffer' => '',
+            'output_protocol_bytes' => 0,
+            'rtcm_output_buffer_bytes' => 0,
+            'rtcm_output_segments' => [],
             'mountpoint' => null,
+            'mountpoint_id' => null,
             'station_id' => null,
+            'pending_device_id' => null,
             'rover_account_id' => null,
             'authenticated_username' => null,
             'client_agent' => null,
@@ -260,9 +293,16 @@ class NtripCaster
     {
         $client = &$this->clients[$clientId];
 
+        $readChunkBytes = max(
+            1,
+            (int) config(
+                'ntrip.read_chunk_bytes',
+            ),
+        );
+
         $data = @fread(
             $client['socket'],
-            (int) config('ntrip.read_chunk_bytes')
+            $readChunkBytes,
         );
 
         if ($data === false) {
@@ -427,6 +467,23 @@ class NtripCaster
                 $matches[1]
             );
 
+            /*
+            * Discovery phải chạy trước registerSource().
+            *
+            * ESP32 mới chưa có Station/Mountpoint nên nếu gọi
+            * registerSource() trước sẽ bị mountpoint_not_found.
+            */
+            if (
+                ! $this->handleSourceDeviceDiscovery(
+                    clientId: $clientId,
+                    mountpointName: $mountpointName,
+                    headers: $headers,
+                    logger: $logger,
+                )
+            ) {
+                return;
+            }
+
             $this->registerSource(
                 $clientId,
                 $mountpointName,
@@ -478,6 +535,154 @@ class NtripCaster
         );
     }
 
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function handleSourceDeviceDiscovery(
+        int $clientId,
+        string $mountpointName,
+        array $headers,
+        callable $logger,
+    ): bool {
+        if (! isset($this->clients[$clientId])) {
+            return false;
+        }
+
+        $client = $this->clients[$clientId];
+
+        try {
+            $decision =
+                $this->sourceDeviceDiscovery->evaluate(
+                    headers: $headers,
+                    requestMountpoint: $mountpointName,
+                    remoteIp: $client['remote_ip'],
+                );
+        } catch (InvalidArgumentException $exception) {
+            $this->queueAndClose(
+                clientId: $clientId,
+                response: $this->deviceDiscoveryResponse(
+                    httpStatus: 400,
+                    reasonPhrase: 'Bad Request',
+                    deviceCode: 'INVALID_DEVICE_IDENTITY',
+                    deviceStatus: 'invalid',
+                ),
+                reason: 'invalid_device_identity',
+                logger: $logger,
+            );
+
+            $logger(
+                sprintf(
+                    'Invalid ESP32 identity from %s: %s',
+                    $client['remote_ip'],
+                    $exception->getMessage(),
+                )
+            );
+
+            return false;
+        }
+
+        if (
+            $decision->shouldContinueAuthentication()
+        ) {
+            $this->clients[$clientId]['pending_device_id'] = $decision->pendingDeviceId;
+
+            return true;
+        }
+
+        [$response, $disconnectReason] =
+            match ($decision->outcome) {
+                SourceDeviceDiscoveryOutcome::DEVICE_PENDING => [
+                    $this->deviceDiscoveryResponse(
+                        httpStatus: 403,
+                        reasonPhrase: 'Forbidden',
+                        deviceCode: 'DEVICE_PENDING',
+                        deviceStatus: 'pending',
+                        retryAfterSeconds: 5,
+                    ),
+                    'device_pending',
+                ],
+
+                SourceDeviceDiscoveryOutcome::DEVICE_REJECTED => [
+                    $this->deviceDiscoveryResponse(
+                        httpStatus: 403,
+                        reasonPhrase: 'Forbidden',
+                        deviceCode: 'DEVICE_REJECTED',
+                        deviceStatus: 'rejected',
+                    ),
+                    'device_rejected',
+                ],
+
+                SourceDeviceDiscoveryOutcome::PROVISIONING_REQUIRED => [
+                    $this->deviceDiscoveryResponse(
+                        httpStatus: 403,
+                        reasonPhrase: 'Forbidden',
+                        deviceCode: 'PROVISIONING_REQUIRED',
+                        deviceStatus: 'approved',
+                        retryAfterSeconds: 5,
+                    ),
+                    'device_provisioning_required',
+                ],
+
+                default => throw new LogicException(
+                    sprintf(
+                        'Unsupported source discovery outcome [%s].',
+                        $decision->outcome->value,
+                    ),
+                ),
+            };
+
+        $this->queueAndClose(
+            clientId: $clientId,
+            response: $response,
+            reason: $disconnectReason,
+            logger: $logger,
+        );
+
+        $logger(
+            sprintf(
+                'Managed ESP32 source %s: hardware_id=%s mountpoint=%s',
+                $decision->outcome->value,
+                $decision->identity->hardwareId,
+                $decision->identity->mountpoint
+                    ?? $mountpointName,
+            )
+        );
+
+        return false;
+    }
+
+    private function deviceDiscoveryResponse(
+        int $httpStatus,
+        string $reasonPhrase,
+        string $deviceCode,
+        string $deviceStatus,
+        ?int $retryAfterSeconds = null,
+    ): string {
+        $body = $deviceCode."\n";
+
+        $headers = [
+            "HTTP/1.1 {$httpStatus} {$reasonPhrase}",
+            'Content-Type: text/plain; charset=utf-8',
+            'Content-Length: '.strlen($body),
+            'X-Device-Code: '.$deviceCode,
+            'X-Device-Status: '.$deviceStatus,
+            'Connection: close',
+        ];
+
+        if ($retryAfterSeconds !== null) {
+            $headers[] =
+                'Retry-After: '.$retryAfterSeconds;
+        }
+
+        return implode(
+            "\r\n",
+            $headers,
+        )."\r\n\r\n".$body;
+    }
+
+    /**
+     * @param  array<string, string>  $headers
+     */
     private function registerSource(
         int $clientId,
         string $mountpointName,
@@ -523,16 +728,31 @@ class NtripCaster
             return;
         }
 
+        $client = &$this->clients[$clientId];
+
+        /*
+        * Chỉ được chuyển approved → provisioned sau khi:
+        *
+        * - mountpoint tồn tại;
+        * - Station đang enabled;
+        * - source token hợp lệ;
+        * - pending device thuộc đúng Station.
+        */
+        $this->deviceProvisioning->markProvisioned(
+            pendingDeviceId: $client['pending_device_id'],
+
+            stationId: (int) $entry['station_id'],
+        );
+
         $this->disconnectExistingSource(
             $mountpointName,
             $clientId,
             $logger
         );
 
-        $client = &$this->clients[$clientId];
-
         $client['state'] = 'source';
         $client['mountpoint'] = $mountpointName;
+        $client['mountpoint_id'] = (int) $entry['mountpoint_id'];
         $client['station_id'] = $entry['station_id'];
         $client['client_agent'] = $headers['user-agent'] ?? null;
         $client['ntrip_version'] = $headers['ntrip-version']
@@ -568,12 +788,16 @@ class NtripCaster
         );
 
         $client['session_id'] = $session->id;
+        $this->flowMetrics->sourceConnected((int) $entry['mountpoint_id']);
 
         $logger(
             "Source connected to {$mountpointName}"
         );
     }
 
+    /**
+     * @param  array<string, string>  $headers
+     */
     private function registerRover(
         int $clientId,
         string $mountpointName,
@@ -637,12 +861,15 @@ class NtripCaster
 
         $client['state'] = 'rover';
         $client['mountpoint'] = $mountpointName;
+        $client['mountpoint_id'] = (int) $entry['mountpoint_id'];
         $client['station_id'] = null;
         $client['rover_account_id'] = $account?->id;
         $client['authenticated_username'] = $account?->username;
         $client['client_agent'] = $headers['user-agent'] ?? null;
         $client['ntrip_version'] = $headers['ntrip-version'] ?? null;
         $client['session_id'] = $session->id;
+
+        $this->flowMetrics->roverConnected(sessionId: (int) $session->id, mountpointId: (int) $entry['mountpoint_id']);
 
         $this->queueOutput(
             $clientId,
@@ -653,7 +880,7 @@ class NtripCaster
             $logger
         );
 
-        $identity = $account?->username ?? 'anonymous';
+        $identity = $account->username ?? 'anonymous';
 
         $logger(
             "Rover {$identity} connected to {$mountpointName}"
@@ -689,34 +916,56 @@ class NtripCaster
         return implode("\r\n", $headers)."\r\n\r\n";
     }
 
-    private function relaySourceData(int $sourceClientId, string $data, callable $logger): void
-    {
+    private function relaySourceData(
+        int $sourceClientId,
+        string $data,
+        callable $logger,
+    ): void {
         if (! isset($this->clients[$sourceClientId])) {
             return;
         }
 
-        $mountpointName =
-            $this->clients[$sourceClientId]['mountpoint'];
+        $source = $this->clients[$sourceClientId];
 
-        if ($mountpointName === null) {
+        $mountpointName = $source['mountpoint'];
+        $mountpointId = $source['mountpoint_id'];
+
+        if (
+            $mountpointName === null
+            || $mountpointId === null
+        ) {
             return;
         }
 
+        $receivedAtNs = $this->monotonicNowNs();
         $dataLength = strlen($data);
 
-        $parser = $this->clients[$sourceClientId]['parser'];
+        if ($dataLength === 0) {
+            return;
+        }
+
+        $parser = $source['parser'];
 
         if ($parser instanceof Rtcm3Parser) {
             $parser->push($data);
         }
 
-        $this->clients[$sourceClientId]['bytes_transferred'] += $dataLength;
+        $this->clients[$sourceClientId][
+            'bytes_transferred'
+        ] += $dataLength;
 
-        foreach (array_keys($this->clients) as $clientId) {
-            if (
-                $clientId === $sourceClientId
-                || ! isset($this->clients[$clientId])
-            ) {
+        $this->flowMetrics->recordSourceBytes(
+            mountpointId: $mountpointId,
+            bytes: $dataLength,
+            occurredAtNs: $receivedAtNs,
+        );
+
+        $roverClientIds = [];
+
+        foreach (
+            array_keys($this->clients) as $clientId
+        ) {
+            if ($clientId === $sourceClientId) {
                 continue;
             }
 
@@ -724,89 +973,414 @@ class NtripCaster
 
             if (
                 $client['state'] !== 'rover'
-                || $client['mountpoint']
-                    !== $mountpointName
+                || $client['mountpoint_id']
+                    !== $mountpointId
             ) {
                 continue;
             }
 
-            $this->queueOutput(
-                $clientId,
-                $data,
-                $logger
+            $roverClientIds[] = $clientId;
+        }
+
+        $expectedBytes =
+            $dataLength * count($roverClientIds);
+
+        if ($expectedBytes > 0) {
+            $this->flowMetrics->recordExpectedEgress(
+                mountpointId: $mountpointId,
+                bytes: $expectedBytes,
             );
         }
+
+        $fanoutStartedAtNs =
+            $this->monotonicNowNs();
+
+        foreach ($roverClientIds as $clientId) {
+            $this->queueOutput(
+                clientId: $clientId,
+                data: $data,
+                logger: $logger,
+                rtcm: true,
+                queuedAtNs: $receivedAtNs,
+            );
+        }
+
+        $this->flowMetrics->recordFanoutDuration(
+            mountpointId: $mountpointId,
+            durationNs: $this->monotonicNowNs()
+                - $fanoutStartedAtNs,
+        );
     }
 
-    private function queueOutput(int $clientId, string $data, callable $logger): void
-    {
+    private function queueOutput(
+        int $clientId,
+        string $data,
+        callable $logger,
+        bool $rtcm = false,
+        ?int $queuedAtNs = null,
+    ): bool {
         if (! isset($this->clients[$clientId])) {
-            return;
+            return false;
+        }
+
+        $dataLength = strlen($data);
+
+        if ($dataLength === 0) {
+            return true;
+        }
+
+        $sessionId = null;
+        $mountpointId = null;
+
+        if ($rtcm) {
+            $client = $this->clients[$clientId];
+
+            $sessionId = $client['session_id'];
+            $mountpointId = $client['mountpoint_id'];
+
+            if (
+                $client['state'] !== 'rover'
+                || $sessionId === null
+                || $mountpointId === null
+            ) {
+                return false;
+            }
         }
 
         $newSize = strlen(
-            $this->clients[$clientId]['output_buffer']
-        ) + strlen($data);
+            $this->clients[$clientId]['output_buffer'],
+        ) + $dataLength;
 
         if (
             $newSize
             > (int) config(
-                'ntrip.max_client_buffer_bytes'
+                'ntrip.max_client_buffer_bytes',
             )
         ) {
+            $this->observeRoverOutputBuffer(
+                $clientId,
+                $this->monotonicNowNs(),
+            );
+
             $this->disconnectClient(
                 $clientId,
                 'client_too_slow',
-                $logger
+                $logger,
             );
 
-            return;
+            return false;
         }
 
-        $this->clients[$clientId]['output_buffer'] .= $data;
+        $this->clients[$clientId]['output_buffer']
+            .= $data;
+
+        if (! $rtcm) {
+            $this->clients[$clientId][
+                'output_protocol_bytes'
+            ] += $dataLength;
+
+            return true;
+        }
+
+        $queuedAtNs ??= $this->monotonicNowNs();
+
+        $this->clients[$clientId][
+            'rtcm_output_buffer_bytes'
+        ] += $dataLength;
+
+        $this->clients[$clientId][
+            'rtcm_output_segments'
+        ][] = [
+            'bytes' => $dataLength,
+            'queued_at_ns' => $queuedAtNs,
+        ];
+
+        $this->flowMetrics->recordRoverQueued(
+            sessionId: $sessionId,
+            mountpointId: $mountpointId,
+            bytes: $dataLength,
+            queuedAtNs: $queuedAtNs,
+        );
+
+        $this->observeRoverOutputBuffer(
+            $clientId,
+            $queuedAtNs,
+        );
+
+        return true;
     }
 
-    private function flushClientOutput(int $clientId, callable $logger): void
-    {
+    private function flushClientOutput(
+        int $clientId,
+        callable $logger,
+    ): void {
         if (! isset($this->clients[$clientId])) {
             return;
         }
 
-        $client = &$this->clients[$clientId];
-
-        if ($client['output_buffer'] === '') {
+        if (
+            $this->clients[$clientId][
+                'output_buffer'
+            ] === ''
+        ) {
             return;
         }
 
-        $written = @fwrite(
-            $client['socket'],
-            $client['output_buffer']
+        $bufferLengthBefore = strlen(
+            $this->clients[$clientId][
+                'output_buffer'
+            ],
         );
 
+        $rtcmBytesBefore =
+            $this->clients[$clientId][
+                'rtcm_output_buffer_bytes'
+            ];
+
+        $written = @fwrite(
+            $this->clients[$clientId]['socket'],
+            $this->clients[$clientId][
+                'output_buffer'
+            ],
+        );
+
+        $nowNs = $this->monotonicNowNs();
+
         if ($written === false) {
+            $client = $this->clients[$clientId];
+
+            if (
+                $rtcmBytesBefore > 0
+                && $client['state'] === 'rover'
+                && $client['session_id'] !== null
+                && $client['mountpoint_id'] !== null
+            ) {
+                $this->flowMetrics->recordWriteFailure(
+                    sessionId: $client['session_id'],
+                    mountpointId: $client['mountpoint_id'],
+                );
+            }
+
             $this->disconnectClient(
                 $clientId,
                 'write_failed',
-                $logger
+                $logger,
             );
 
             return;
         }
 
         if ($written === 0) {
+            $client = $this->clients[$clientId];
+
+            if (
+                $rtcmBytesBefore > 0
+                && $client['state'] === 'rover'
+                && $client['session_id'] !== null
+                && $client['mountpoint_id'] !== null
+            ) {
+                $this->flowMetrics->recordZeroWrite(
+                    sessionId: $client['session_id'],
+                    mountpointId: $client['mountpoint_id'],
+                );
+            }
+
+            $this->observeRoverOutputBuffer(
+                $clientId,
+                $nowNs,
+            );
+
             return;
         }
 
-        $client['output_buffer'] = substr(
-            $client['output_buffer'],
-            $written
+        $this->clients[$clientId]['output_buffer'] =
+            substr(
+                $this->clients[$clientId][
+                    'output_buffer'
+                ],
+                $written,
+            );
+
+        $remainingWritten = $written;
+
+        $protocolBytesWritten = min(
+            $this->clients[$clientId][
+                'output_protocol_bytes'
+            ],
+            $remainingWritten,
         );
 
-        $client['last_activity'] = time();
+        $this->clients[$clientId][
+            'output_protocol_bytes'
+        ] -= $protocolBytesWritten;
 
-        if ($client['state'] === 'rover') {
-            $client['bytes_transferred'] += $written;
+        $remainingWritten -= $protocolBytesWritten;
+
+        $rtcmBytesWritten =
+            $this->consumeRtcmOutputSegments(
+                $clientId,
+                $remainingWritten,
+            );
+
+        $this->clients[$clientId]['last_activity'] =
+            time();
+
+        if (
+            $this->clients[$clientId]['state']
+            !== 'rover'
+        ) {
+            return;
         }
+
+        $this->clients[$clientId][
+            'bytes_transferred'
+        ] += $written;
+
+        $sessionId =
+            $this->clients[$clientId]['session_id'];
+
+        $mountpointId =
+            $this->clients[$clientId]['mountpoint_id'];
+
+        if (
+            $sessionId === null
+            || $mountpointId === null
+        ) {
+            return;
+        }
+
+        if (
+            $rtcmBytesBefore > 0
+            && $written < $bufferLengthBefore
+        ) {
+            $this->flowMetrics->recordPartialWrite(
+                sessionId: $sessionId,
+                mountpointId: $mountpointId,
+            );
+        }
+
+        if ($rtcmBytesWritten > 0) {
+            $this->flowMetrics->recordRoverWritten(
+                sessionId: $sessionId,
+                mountpointId: $mountpointId,
+                bytes: $rtcmBytesWritten,
+                writtenAtNs: $nowNs,
+            );
+        }
+
+        $this->observeRoverOutputBuffer(
+            $clientId,
+            $nowNs,
+        );
+    }
+
+    private function consumeRtcmOutputSegments(
+        int $clientId,
+        int $bytes,
+    ): int {
+        if (
+            $bytes <= 0
+            || ! isset($this->clients[$clientId])
+        ) {
+            return 0;
+        }
+
+        $segments =
+            $this->clients[$clientId][
+                'rtcm_output_segments'
+            ];
+
+        $remainingBytes = $bytes;
+        $consumedBytes = 0;
+
+        while (
+            $remainingBytes > 0
+            && $segments !== []
+        ) {
+            $segment = $segments[0];
+
+            $consumedFromSegment = min(
+                $remainingBytes,
+                $segment['bytes'],
+            );
+
+            $segment['bytes'] -=
+                $consumedFromSegment;
+
+            $remainingBytes -=
+                $consumedFromSegment;
+
+            $consumedBytes +=
+                $consumedFromSegment;
+
+            if ($segment['bytes'] === 0) {
+                array_shift($segments);
+
+                continue;
+            }
+
+            $segments[0] = $segment;
+        }
+
+        $this->clients[$clientId][
+            'rtcm_output_segments'
+        ] = $segments;
+
+        $this->clients[$clientId][
+            'rtcm_output_buffer_bytes'
+        ] = max(
+            0,
+            $this->clients[$clientId][
+                'rtcm_output_buffer_bytes'
+            ] - $consumedBytes,
+        );
+
+        return $consumedBytes;
+    }
+
+    private function observeAllRoverOutputBuffers(
+        int $nowNs,
+    ): void {
+        foreach (
+            array_keys($this->clients) as $clientId
+        ) {
+            $this->observeRoverOutputBuffer(
+                $clientId,
+                $nowNs,
+            );
+        }
+    }
+
+    private function observeRoverOutputBuffer(
+        int $clientId,
+        int $nowNs,
+    ): void {
+        if (! isset($this->clients[$clientId])) {
+            return;
+        }
+
+        $client = $this->clients[$clientId];
+
+        if (
+            $client['state'] !== 'rover'
+            || $client['session_id'] === null
+            || $client['mountpoint_id'] === null
+        ) {
+            return;
+        }
+
+        $firstSegment =
+            $client['rtcm_output_segments'][0]
+            ?? null;
+
+        $oldestBufferAgeNs = $firstSegment === null ? 0 : (int) max(0, $nowNs - $firstSegment['queued_at_ns']);
+
+        $this->flowMetrics->observeRoverBuffer(
+            sessionId: $client['session_id'],
+            mountpointId: $client['mountpoint_id'],
+            bufferBytes: $client['rtcm_output_buffer_bytes'],
+            oldestBufferAgeNs: $oldestBufferAgeNs,
+        );
     }
 
     private function sendSourcetable(int $clientId, callable $logger): void
@@ -935,10 +1509,7 @@ class NtripCaster
     private function disconnectExistingSource(string $mountpointName, int $newSourceId, callable $logger): void
     {
         foreach (array_keys($this->clients) as $clientId) {
-            if (
-                $clientId === $newSourceId
-                || ! isset($this->clients[$clientId])
-            ) {
+            if ($clientId === $newSourceId) {
                 continue;
             }
 
@@ -958,6 +1529,9 @@ class NtripCaster
         }
     }
 
+    /**
+     * @param  array<string, string>  $headers
+     */
     private function extractBearerToken(array $headers): ?string
     {
         $authorization =
@@ -976,6 +1550,12 @@ class NtripCaster
         return trim($matches[1]);
     }
 
+    /**
+     * @return array{
+     *     0: string,
+     *     1: array<string, string>
+     * }
+     */
     private function parseRequestHeader(string $rawHeader): array
     {
         $lines = preg_split(
@@ -1010,9 +1590,6 @@ class NtripCaster
         $now = time();
 
         foreach (array_keys($this->clients) as $clientId) {
-            if (! isset($this->clients[$clientId])) {
-                continue;
-            }
 
             $client = $this->clients[$clientId];
 
@@ -1073,6 +1650,33 @@ class NtripCaster
         }
 
         $client = $this->clients[$clientId];
+
+        $nowNs = $this->monotonicNowNs();
+
+        if (
+            $client['state'] === 'source'
+            && $client['mountpoint_id'] !== null
+        ) {
+            $this->flowMetrics->sourceDisconnected(
+                $client['mountpoint_id'],
+            );
+        }
+
+        if (
+            $client['state'] === 'rover'
+            && $client['session_id'] !== null
+            && $client['mountpoint_id'] !== null
+        ) {
+            $this->observeRoverOutputBuffer(
+                $clientId,
+                $nowNs,
+            );
+
+            $this->flowMetrics->roverDisconnected(
+                sessionId: $client['session_id'],
+                mountpointId: $client['mountpoint_id'],
+            );
+        }
 
         unset($this->clients[$clientId]);
 
@@ -1165,14 +1769,13 @@ class NtripCaster
         );
     }
 
+    /**
+     * @param  array<string, array<string, mixed>>  $newCatalog
+     */
     private function disconnectInvalidClients(array $newCatalog, callable $logger): void
     {
 
         foreach (array_keys($this->clients) as $clientId) {
-            if (! isset($this->clients[$clientId])) {
-                continue;
-            }
-
             $client = $this->clients[$clientId];
 
             if (
@@ -1277,6 +1880,10 @@ class NtripCaster
             );
         }
 
+        $this->flowMetrics->flush(
+            $this->monotonicNowNs(),
+        );
+
         /*
         * Bảo đảm không còn station nào bị giữ trạng thái online.
         */
@@ -1285,5 +1892,10 @@ class NtripCaster
         ]);
 
         $logger('NTRIP caster shutdown completed.');
+    }
+
+    private function monotonicNowNs(): int
+    {
+        return (int) hrtime(true);
     }
 }

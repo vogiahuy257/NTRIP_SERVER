@@ -1,22 +1,15 @@
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { MapTopNavigation } from '@/components/map-dashboard/map-top-navigation';
-import {
-    NtripMap,
-    type NtripMapHandle,
-    type StationMapAnchor,
+import { NtripMap } from '@/components/map-dashboard/ntrip-map';
+import type {
+    NtripMapHandle,
+    StationMapAnchor,
 } from '@/components/map-dashboard/ntrip-map';
-import {
-    MapDashboardProvider,
-    type MapDashboardContextValue,
-} from '@/contexts/map-dashboard-context';
+import { MapDashboardProvider } from '@/contexts/map-dashboard-context';
+import type { MapDashboardContextValue } from '@/contexts/map-dashboard-context';
+import { PendingDeviceProvider } from '@/features/pending-devices/pending-device-context';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
 import type { DashboardStation } from '@/types/ntrip-dashboard';
 
@@ -40,13 +33,13 @@ export default function MapDashboardLayout({
         DashboardStation['id'] | null
     >(null);
 
-    const hoverClearTimeoutRef = useRef<number | null>(null);
-
     const [stationMapAnchor, setStationMapAnchor] =
         useState<StationMapAnchor | null>(null);
 
+    const hoverClearTimeoutRef = useRef<number | null>(null);
+
     const setHoveredStationId = useCallback(
-        (stationId: DashboardStation['id'] | null) => {
+        (stationId: DashboardStation['id'] | null): void => {
             if (hoverClearTimeoutRef.current !== null) {
                 window.clearTimeout(hoverClearTimeoutRef.current);
                 hoverClearTimeoutRef.current = null;
@@ -54,6 +47,7 @@ export default function MapDashboardLayout({
 
             if (stationId !== null) {
                 setHoveredStationIdState(stationId);
+
                 return;
             }
 
@@ -79,6 +73,7 @@ export default function MapDashboardLayout({
 
             if (previousValue === null) {
                 rootElement.removeAttribute('data-ntrip-dashboard');
+
                 return;
             }
 
@@ -86,41 +81,32 @@ export default function MapDashboardLayout({
         };
     }, []);
 
-    useEffect(() => {
-        setSelectedStationId((currentStationId) => {
-            if (currentStationId === null) {
-                return null;
-            }
+    const stationIds = useMemo(
+        () => new Set(stations.map((station) => String(station.id))),
+        [stations],
+    );
 
-            const stationStillExists = stations.some(
-                (station) => String(station.id) === String(currentStationId),
-            );
+    const resolvedSelectedStationId =
+        selectedStationId !== null && stationIds.has(String(selectedStationId))
+            ? selectedStationId
+            : null;
 
-            return stationStillExists ? currentStationId : null;
-        });
-
-        setHoveredStationIdState((currentStationId) => {
-            if (currentStationId === null) {
-                return null;
-            }
-
-            const stationStillExists = stations.some(
-                (station) => String(station.id) === String(currentStationId),
-            );
-
-            return stationStillExists ? currentStationId : null;
-        });
-    }, [stations]);
+    const resolvedHoveredStationId =
+        hoveredStationId !== null && stationIds.has(String(hoveredStationId))
+            ? hoveredStationId
+            : null;
 
     const selectedStation = useMemo(
         () =>
             stations.find(
-                (station) => String(station.id) === String(selectedStationId),
+                (station) =>
+                    String(station.id) === String(resolvedSelectedStationId),
             ) ?? null,
-        [selectedStationId, stations],
+        [resolvedSelectedStationId, stations],
     );
 
-    const activeStationId = hoveredStationId ?? selectedStationId;
+    const activeStationId =
+        resolvedHoveredStationId ?? resolvedSelectedStationId;
 
     const activeStation = useMemo(
         () =>
@@ -135,11 +121,11 @@ export default function MapDashboardLayout({
             ...dashboardData,
             mapRef,
 
-            selectedStationId,
+            selectedStationId: resolvedSelectedStationId,
             selectedStation,
             setSelectedStationId,
 
-            hoveredStationId,
+            hoveredStationId: resolvedHoveredStationId,
             setHoveredStationId,
 
             activeStationId,
@@ -150,9 +136,9 @@ export default function MapDashboardLayout({
             activeStation,
             activeStationId,
             dashboardData,
-            hoveredStationId,
+            resolvedHoveredStationId,
+            resolvedSelectedStationId,
             selectedStation,
-            selectedStationId,
             stationMapAnchor,
             setHoveredStationId,
         ],
@@ -160,30 +146,32 @@ export default function MapDashboardLayout({
 
     return (
         <MapDashboardProvider value={contextValue}>
-            <main className="ntrip-dashboard fixed inset-0 isolate z-[60] h-dvh w-screen overflow-hidden font-sans">
-                <NtripMap
-                    ref={mapRef}
-                    stations={stations}
-                    selectedStationId={selectedStationId}
-                    activeStationId={activeStationId}
-                    onSelectStation={(stationId) => {
-                        setHoveredStationId(null);
-                        setSelectedStationId(stationId);
-                    }}
-                    onHoverStation={setHoveredStationId}
-                    onStationAnchorChange={setStationMapAnchor}
-                />
+            <PendingDeviceProvider>
+                <main className="ntrip-dashboard fixed inset-0 isolate z-[60] h-dvh w-screen overflow-hidden font-sans">
+                    <NtripMap
+                        ref={mapRef}
+                        stations={stations}
+                        selectedStationId={resolvedSelectedStationId}
+                        activeStationId={activeStationId}
+                        onSelectStation={(stationId) => {
+                            setHoveredStationId(null);
+                            setSelectedStationId(stationId);
+                        }}
+                        onHoverStation={setHoveredStationId}
+                        onStationAnchorChange={setStationMapAnchor}
+                    />
 
-                <div className="ntrip-map-overlay pointer-events-none absolute inset-0 z-10" />
+                    <div className="ntrip-map-overlay pointer-events-none absolute inset-0 z-10" />
 
-                <div className="pointer-events-none absolute inset-1.5 z-20 grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5 sm:inset-2 sm:gap-2 lg:inset-3 lg:gap-3">
-                    <MapTopNavigation />
+                    <div className="ntrip-safe-frame pointer-events-none absolute z-20 grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-1.5 sm:gap-2 lg:gap-3">
+                        <MapTopNavigation />
 
-                    <div className="pointer-events-none relative min-h-0 min-w-0 overflow-hidden">
-                        {children}
+                        <div className="pointer-events-none relative min-h-0 min-w-0 overflow-hidden">
+                            {children}
+                        </div>
                     </div>
-                </div>
-            </main>
+                </main>
+            </PendingDeviceProvider>
         </MapDashboardProvider>
     );
 }

@@ -11,6 +11,8 @@ Route::middleware(['auth', 'verified'])->get('/rtcm', fn () => Inertia::render('
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
 
+    Route::inertia('/system', 'system/index')->name('system.index');
+
     Route::inertia('/dashboard', 'dashboard/index')->name('dashboard');
 
     Route::prefix('stations')

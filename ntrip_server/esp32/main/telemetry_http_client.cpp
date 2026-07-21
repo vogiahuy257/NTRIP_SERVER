@@ -34,7 +34,7 @@ void TelemetryHttpClient::task()
         const RuntimeConfig config =
             RuntimeConfigManager::instance().snapshot();
 
-        if (config.enabled) {
+        if (config.enabled && config.provisioned) {
             send();
         }
 
@@ -46,6 +46,10 @@ void TelemetryHttpClient::send()
 {
     const RuntimeConfig config =
         RuntimeConfigManager::instance().snapshot();
+
+    if (!config.provisioned) {
+        return;
+    }
 
     const StationSnapshot state =
         StationState::instance().snapshot();
@@ -70,15 +74,21 @@ void TelemetryHttpClient::send()
         "http://%s:%u/api/v1/stations/%s/telemetry",
         config.caster_host,
         config.management_port,
-        app_defaults::DEVICE_ID);
+        config.device_id);
 
-    char body[1024]{};
+    char body[1536]{};
     const int body_length = std::snprintf(
         body,
         sizeof(body),
         "{"
         "\"firmware_version\":\"%s\","
         "\"source_connected\":%s,"
+        "\"identity\":{"
+        "\"hardware_id\":\"%s\","
+        "\"device_id\":\"%s\","
+        "\"provisioned\":true,"
+        "\"config_revision_applied\":%lu"
+        "},"
         "\"network\":{"
         "\"type\":\"%s\","
         "\"rssi\":%d"
@@ -93,7 +103,9 @@ void TelemetryHttpClient::send()
         "\"bytes_sent\":%llu,"
         "\"frames_valid\":%llu,"
         "\"crc_errors\":%llu,"
-        "\"upload_bps\":%llu"
+        "\"upload_bps\":%llu,"
+        "\"queue_drops\":%llu,"
+        "\"stale_drops\":%llu"
         "},"
         "\"system\":{"
         "\"uptime_s\":%lld"
@@ -101,6 +113,9 @@ void TelemetryHttpClient::send()
         "}",
         app_defaults::FIRMWARE_VERSION,
         state.source_connected ? "true" : "false",
+        config.hardware_id,
+        config.device_id,
+        static_cast<unsigned long>(config.revision),
         network_manager::active_name(),
         network_manager::wifi_rssi(),
         state.survey.active ? "true" : "false",
@@ -111,9 +126,13 @@ void TelemetryHttpClient::send()
         static_cast<unsigned long long>(state.valid_frames),
         static_cast<unsigned long long>(state.bad_crc_frames),
         static_cast<unsigned long long>(upload_bps),
+        static_cast<unsigned long long>(state.queue_drops),
+        static_cast<unsigned long long>(state.stale_drops),
         static_cast<long long>(now_us / 1000000));
 
-    if (body_length <= 0 || body_length >= static_cast<int>(sizeof(body))) {
+    if (
+        body_length <= 0 ||
+        body_length >= static_cast<int>(sizeof(body))) {
         return;
     }
 
@@ -132,7 +151,10 @@ void TelemetryHttpClient::send()
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_header(client, "Accept", "application/json");
     esp_http_client_set_header(client, "X-Station-Token", config.auth_token);
+    esp_http_client_set_header(client, "X-Hardware-ID", config.hardware_id);
+    esp_http_client_set_header(client, "X-Device-ID", config.device_id);
     esp_http_client_set_post_field(client, body, body_length);
+
     esp_http_client_perform(client);
     esp_http_client_cleanup(client);
 }

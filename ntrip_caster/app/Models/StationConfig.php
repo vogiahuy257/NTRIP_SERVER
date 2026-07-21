@@ -30,6 +30,9 @@ class StationConfig extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Station, $this>
+     */
     public function station(): BelongsTo
     {
         return $this->belongsTo(Station::class);

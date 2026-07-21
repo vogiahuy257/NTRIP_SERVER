@@ -95,7 +95,7 @@ final class NtripSessionService
      * Source có thêm thống kê RTCM.
      * Rover chỉ cần bytes_transferred.
      *
-     * @param  array<string, int>|null  $rtcmMessageCounts
+     * @param  array<array-key, int>|null  $rtcmMessageCounts
      */
     public function updateStats(
         int $sessionId,
@@ -186,7 +186,7 @@ final class NtripSessionService
     /**
      * Kết thúc một session đang hoạt động.
      *
-     * @param  array<string, int>|null  $rtcmMessageCounts
+     * @param  array<array-key, int>|null  $rtcmMessageCounts
      */
     public function end(
         int $sessionId,
@@ -369,8 +369,8 @@ final class NtripSessionService
     }
 
     /**
-     * @param  array<string, int>  $counts
-     * @return array<string, int>
+     * @param  array<array-key, int>  $counts
+     * @return array<array-key, int>
      */
     private function normaliseMessageCounts(
         array $counts,

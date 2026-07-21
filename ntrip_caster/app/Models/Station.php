@@ -35,6 +35,9 @@ class Station extends Model
         ];
     }
 
+    /**
+     * @return HasOne<StationConfig, $this>
+     */
     public function config(): HasOne
     {
         return $this->hasOne(
@@ -42,9 +45,8 @@ class Station extends Model
         );
     }
 
-    /*
-     * Quan hệ chính theo kiến trúc mới:
-     * một Station có nhiều Mountpoint.
+    /**
+     * @return HasMany<Mountpoint, $this>
      */
     public function mountpoints(): HasMany
     {
@@ -53,9 +55,8 @@ class Station extends Model
         );
     }
 
-    /*
-     * Alias tương thích cho firmware, controller và frontend cũ.
-     * Chỉ trả về Mountpoint primary.
+    /**
+     * @return HasOne<Mountpoint, $this>
      */
     public function mountpoint(): HasOne
     {
@@ -66,6 +67,9 @@ class Station extends Model
             ->orderBy('id');
     }
 
+    /**
+     * @return HasOne<StationTelemetry, $this>
+     */
     public function telemetry(): HasOne
     {
         return $this->hasOne(
@@ -73,8 +77,8 @@ class Station extends Model
         );
     }
 
-    /*
-     * Các Source session được gắn trực tiếp với Station.
+    /**
+     * @return HasMany<NtripSession, $this>
      */
     public function sessions(): HasMany
     {

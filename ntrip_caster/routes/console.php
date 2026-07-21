@@ -13,3 +13,9 @@ Schedule::job(new EvaluateAlerts)
     ->name('alerts:evaluate')
     ->everyFiveSeconds()
     ->when(fn (): bool => (bool) config('alerts.enabled'));
+
+Schedule::command(
+    'ntrip:observability-maintain',
+)
+    ->everyMinute()
+    ->withoutOverlapping(5);

@@ -7,7 +7,7 @@
     --color-ntrip-coral: rgb(var(--ntrip-coral));
 
     /* Compact typography tokens for values used by the dashboard. */
-    --text-offset: 0.0rem; 
+    --text-offset: 0rem;
 
     --text-3xs: calc(0.45rem + var(--text-offset));
     --text-3xs--line-height: 0.65rem;
@@ -44,7 +44,7 @@
         0 1px 2px rgb(var(--ntrip-ink) / 0.014),
         0 6px 18px rgb(var(--ntrip-ink) / 0.026);
     --shadow-ntrip-card:
-        inset 0 1px 0 rgb(255 255 255 / 0.20),
+        inset 0 1px 0 rgb(255 255 255 / 0.2),
         inset 0 0 0 1px rgb(var(--ntrip-ink) / 0.012),
         0 4px 12px rgb(var(--ntrip-ink) / 0.022);
     --shadow-ntrip-inset:
@@ -110,7 +110,7 @@
     --ntrip-surface-muted: rgb(var(--ntrip-cloud) / 0.018);
     --ntrip-surface-dark: rgb(var(--ntrip-ink));
 
-    --ntrip-glass-border: rgb(255 255 255 / 0.50);
+    --ntrip-glass-border: rgb(255 255 255 / 0.5);
     --ntrip-glass-border-strong: rgb(255 255 255 / 0.62);
     --ntrip-glass-highlight: rgb(255 255 255 / 0.08);
     --ntrip-glass-blur: 7px;
@@ -137,6 +137,15 @@
 
 .ntrip-dashboard,
 html[data-ntrip-dashboard='true'] {
+    /*
+     * Shared shadcn/Recharts palette.
+     */
+    --chart-1: rgb(var(--ntrip-teal));
+    --chart-2: rgb(var(--ntrip-amber));
+    --chart-3: rgb(var(--ntrip-ink) / 0.72);
+    --chart-4: rgb(var(--ntrip-coral));
+    --chart-5: rgb(var(--ntrip-ink) / 0.42);
+
     background: var(--ntrip-surface-page);
     color: var(--ntrip-text-primary);
 
@@ -200,7 +209,7 @@ html[data-ntrip-dashboard='true'] {
         --ntrip-panel-blur: 7px;
         border-color: var(--ntrip-glass-border-strong);
         box-shadow:
-            inset 0 1px 0 rgb(255 255 255 / 0.30),
+            inset 0 1px 0 rgb(255 255 255 / 0.3),
             inset 0 -1px 0 rgb(var(--ntrip-ink) / 0.012),
             0 1px 3px rgb(var(--ntrip-ink) / 0.018),
             0 9px 24px rgb(var(--ntrip-ink) / 0.038);
@@ -401,23 +410,24 @@ html[data-ntrip-dashboard='true'] {
     }
 }
 
-
 /* Opaque fallback for browsers that cannot blur the content behind a panel. */
-@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+@supports not (
+    (-webkit-backdrop-filter: blur(1.5px)) or (backdrop-filter: blur(1.5px))
+) {
     .ntrip-glass-panel {
-        background: rgb(var(--ntrip-cloud) / 0.48);
+        background: rgb(var(--ntrip-cloud) / 0.52);
     }
 
     .ntrip-glass-panel-dense {
-        background: rgb(var(--ntrip-cloud) / 0.56);
+        background: rgb(var(--ntrip-cloud) / 0.60);
     }
 
     .ntrip-glass-panel-strong {
-        background: rgb(var(--ntrip-cloud) / 0.64);
+        background: rgb(var(--ntrip-cloud) / 0.68);
     }
 
     .ntrip-map .maplibregl-ctrl-attrib {
-        background: rgb(var(--ntrip-cloud) / 0.92);
+        background: rgb(var(--ntrip-cloud) / 0.96);
     }
 }
 
@@ -570,6 +580,35 @@ html[data-ntrip-dashboard='true'] {
 }
 
 /* NTRIP_DASHBOARD_DENSITY_START */
+
+/*
+ * Safe frame for mobile browsers, PWA mode,
+ * notches and gesture navigation bars.
+ */
+.ntrip-safe-frame {
+    top: max(0.375rem, env(safe-area-inset-top));
+    right: max(0.375rem, env(safe-area-inset-right));
+    bottom: max(0.375rem, env(safe-area-inset-bottom));
+    left: max(0.375rem, env(safe-area-inset-left));
+}
+
+@media (min-width: 640px) {
+    .ntrip-safe-frame {
+        top: max(0.5rem, env(safe-area-inset-top));
+        right: max(0.5rem, env(safe-area-inset-right));
+        bottom: max(0.5rem, env(safe-area-inset-bottom));
+        left: max(0.5rem, env(safe-area-inset-left));
+    }
+}
+
+@media (min-width: 1024px) {
+    .ntrip-safe-frame {
+        top: max(0.75rem, env(safe-area-inset-top));
+        right: max(0.75rem, env(safe-area-inset-right));
+        bottom: max(0.75rem, env(safe-area-inset-bottom));
+        left: max(0.75rem, env(safe-area-inset-left));
+    }
+}
 
 /*
  * Compact density chỉ được kích hoạt trong MapDashboardLayout.

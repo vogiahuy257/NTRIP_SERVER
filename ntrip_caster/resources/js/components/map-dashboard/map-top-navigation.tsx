@@ -1,18 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
-
-import {
-    ChevronDown,
-    Menu,
-    RadioTower,
-    X,
-} from 'lucide-react';
-
+import { ChevronDown, Menu, RadioTower, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
-import { cn } from '@/lib/utils';
 import { AlertNotificationDrawer } from '@/features/alerts/alert-notification-drawer';
+import { usePendingDevices } from '@/features/pending-devices/use-pending-devices';
+import { cn } from '@/lib/utils';
 
 const NAVIGATION = [
     {
@@ -22,6 +16,7 @@ const NAVIGATION = [
     {
         label: 'Stations',
         href: '/stations',
+        pendingDevices: true,
     },
     {
         label: 'Mountpoints',
@@ -35,18 +30,19 @@ const NAVIGATION = [
         label: 'Sessions',
         href: '/sessions',
     },
+    {
+        label: 'System',
+        href: '/system',
+    },
 ] as const;
 
-/*
- * Dùng đúng một typography và một kích thước cho mọi mục desktop.
- * Không dùng button disabled để tránh khác biệt hiển thị với thẻ Link.
- */
 const DESKTOP_NAV_ITEM_CLASS = [
     'inline-flex',
     'h-10',
     'shrink-0',
     'items-center',
     'justify-center',
+    'gap-2',
     'rounded-xl',
     'px-4',
     'font-sans',
@@ -56,9 +52,6 @@ const DESKTOP_NAV_ITEM_CLASS = [
     'transition',
 ].join(' ');
 
-/*
- * Menu mobile sử dụng vùng bấm lớn hơn desktop.
- */
 const MOBILE_NAV_ITEM_CLASS = [
     'flex',
     'min-h-11',
@@ -74,6 +67,46 @@ const MOBILE_NAV_ITEM_CLASS = [
     'font-semibold',
     'transition',
 ].join(' ');
+
+type PendingDeviceBadgeProps = {
+    count: number;
+};
+
+function PendingDeviceBadge({ count }: PendingDeviceBadgeProps) {
+    if (count <= 0) {
+        return null;
+    }
+
+    const displayedCount = count > 99 ? '99+' : String(count);
+
+    return (
+        <span
+            aria-label={`${count} pending devices`}
+            title={`${count} pending devices`}
+            className={cn(
+                'inline-flex',
+                'h-5',
+                'min-w-5',
+                'shrink-0',
+                'items-center',
+                'justify-center',
+                'rounded-full',
+                'border',
+                'border-ntrip-amber/35',
+                'bg-ntrip-amber/24',
+                'px-1.5',
+                'font-sans',
+                'text-[10px]',
+                'leading-none',
+                'font-bold',
+                'text-ntrip-ink',
+                'shadow-ntrip-inset-strong',
+            )}
+        >
+            {displayedCount}
+        </span>
+    );
+}
 
 function isCurrentPage(currentUrl: string, href: string): boolean {
     if (href === '/dashboard') {
@@ -106,39 +139,65 @@ function getRealtimeLabel(
     }
 }
 
+type MobileMenuState = {
+    url: string;
+    open: boolean;
+};
+
 export function MapTopNavigation() {
     const { url } = usePage();
 
     const {
         isRefreshing,
         error,
-        refresh,
         realtimeConnectionState,
         isRealtimeResyncing,
     } = useMapDashboard();
 
+    const { pendingCount } = usePendingDevices();
+
     const currentUrl = url.split('?')[0];
 
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
     /*
-     * Đóng menu khi Inertia chuyển sang trang khác.
+     * Gắn trạng thái menu với URL hiện tại.
+     * Khi Inertia đổi trang, menu tự được xem là đóng,
+     * không cần gọi setState trong useEffect.
      */
-    useEffect(() => {
-        setMobileMenuOpen(false);
-    }, [currentUrl]);
+    const [mobileMenuState, setMobileMenuState] = useState<MobileMenuState>(
+        () => ({
+            url: currentUrl,
+            open: false,
+        }),
+    );
 
-    /*
-     * Cho phép đóng menu bằng phím Escape.
-     */
+    const mobileMenuOpen =
+        mobileMenuState.url === currentUrl && mobileMenuState.open;
+
+    const closeMobileMenu = (): void => {
+        setMobileMenuState({
+            url: currentUrl,
+            open: false,
+        });
+    };
+
+    const toggleMobileMenu = (): void => {
+        setMobileMenuState({
+            url: currentUrl,
+            open: !mobileMenuOpen,
+        });
+    };
+
     useEffect(() => {
         if (!mobileMenuOpen) {
             return;
         }
 
-        const handleKeyDown = (event: KeyboardEvent) => {
+        const handleKeyDown = (event: KeyboardEvent): void => {
             if (event.key === 'Escape') {
-                setMobileMenuOpen(false);
+                setMobileMenuState({
+                    url: currentUrl,
+                    open: false,
+                });
             }
         };
 
@@ -147,13 +206,19 @@ export function MapTopNavigation() {
         return () => {
             window.removeEventListener('keydown', handleKeyDown);
         };
-    }, [mobileMenuOpen]);
+    }, [currentUrl, mobileMenuOpen]);
 
     return (
         <header
-            onPointerDown={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
-            onWheel={(event) => event.stopPropagation()}
+            onPointerDown={(event) => {
+                event.stopPropagation();
+            }}
+            onDoubleClick={(event) => {
+                event.stopPropagation();
+            }}
+            onWheel={(event) => {
+                event.stopPropagation();
+            }}
             className={cn('ntrip-glass-panel', [
                 'pointer-events-auto',
                 'relative',
@@ -200,9 +265,7 @@ export function MapTopNavigation() {
                     }
                     aria-controls="ntrip-mobile-navigation"
                     aria-expanded={mobileMenuOpen}
-                    onClick={() => {
-                        setMobileMenuOpen((currentValue) => !currentValue);
-                    }}
+                    onClick={toggleMobileMenu}
                     className="size-10 rounded-xl bg-ntrip-cloud/68 lg:hidden"
                 >
                     {mobileMenuOpen ? (
@@ -218,13 +281,14 @@ export function MapTopNavigation() {
                 className="ml-3 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex"
             >
                 {NAVIGATION.map((item) => {
-                    const active =
-                        item.href !== null &&
-                        isCurrentPage(currentUrl, item.href);
+                    const active = isCurrentPage(currentUrl, item.href);
+
+                    const showPendingBadge =
+                        'pendingDevices' in item && item.pendingDevices;
 
                     return (
                         <Link
-                            key={item.label}
+                            key={item.href}
                             href={item.href}
                             preserveScroll
                             aria-current={active ? 'page' : undefined}
@@ -235,7 +299,11 @@ export function MapTopNavigation() {
                                     : 'text-ntrip-ink/52 hover:bg-ntrip-cloud/60 hover:text-ntrip-ink',
                             )}
                         >
-                            {item.label}
+                            <span>{item.label}</span>
+
+                            {showPendingBadge && (
+                                <PendingDeviceBadge count={pendingCount} />
+                            )}
                         </Link>
                     );
                 })}
@@ -252,6 +320,7 @@ export function MapTopNavigation() {
                                 ? 'Refreshing'
                                 : getRealtimeLabel(realtimeConnectionState)}
                     </span>
+
                     <span
                         className={cn(
                             'size-2 rounded-full',
@@ -267,7 +336,8 @@ export function MapTopNavigation() {
                         )}
                     />
                 </div>
-                <AlertNotificationDrawer/>
+
+                <AlertNotificationDrawer />
 
                 <button
                     type="button"
@@ -300,17 +370,18 @@ export function MapTopNavigation() {
                 >
                     <nav aria-label="Mobile navigation" className="grid gap-1">
                         {NAVIGATION.map((item) => {
-                            const active = item.href !== null && isCurrentPage(currentUrl, item.href);
+                            const active = isCurrentPage(currentUrl, item.href);
+
+                            const showPendingBadge =
+                                'pendingDevices' in item && item.pendingDevices;
 
                             return (
                                 <Link
-                                    key={item.label}
+                                    key={item.href}
                                     href={item.href}
                                     preserveScroll
                                     aria-current={active ? 'page' : undefined}
-                                    onClick={() => {
-                                        setMobileMenuOpen(false);
-                                    }}
+                                    onClick={closeMobileMenu}
                                     className={cn(
                                         MOBILE_NAV_ITEM_CLASS,
                                         active
@@ -320,9 +391,17 @@ export function MapTopNavigation() {
                                 >
                                     <span>{item.label}</span>
 
-                                    {active && (
-                                        <span className="size-2 rounded-full bg-ntrip-teal" />
-                                    )}
+                                    <span className="flex items-center gap-2">
+                                        {showPendingBadge && (
+                                            <PendingDeviceBadge
+                                                count={pendingCount}
+                                            />
+                                        )}
+
+                                        {active && (
+                                            <span className="size-2 rounded-full bg-ntrip-teal" />
+                                        )}
+                                    </span>
                                 </Link>
                             );
                         })}

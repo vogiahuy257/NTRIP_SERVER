@@ -55,6 +55,9 @@ class Mountpoint extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Station, $this>
+     */
     public function station(): BelongsTo
     {
         return $this->belongsTo(
@@ -79,6 +82,9 @@ class Mountpoint extends Model
             ->withTimestamps();
     }
 
+    /**
+     * @return HasMany<NtripSession, $this>
+     */
     public function sessions(): HasMany
     {
         return $this->hasMany(
