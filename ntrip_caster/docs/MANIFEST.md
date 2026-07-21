@@ -1,0 +1,31 @@
+# Documentation Manifest
+
+- `README.md`
+- `docs/README.md`
+- `docs/api/http-api.md`
+- `docs/api/realtime-events.md`
+- `docs/architecture/data-flows.md`
+- `docs/architecture/system-architecture.md`
+- `docs/data/database-schema.md`
+- `docs/development/local-development.md`
+- `docs/feature-specification-template.md`
+- `docs/features/alerts.md`
+- `docs/features/authentication.md`
+- `docs/features/dashboard-realtime.md`
+- `docs/features/device-provisioning.md`
+- `docs/features/mountpoints.md`
+- `docs/features/ntrip-caster.md`
+- `docs/features/rover-access.md`
+- `docs/features/rtcm-parser.md`
+- `docs/features/sessions.md`
+- `docs/features/station-configuration.md`
+- `docs/features/stations.md`
+- `docs/features/system-observability.md`
+- `docs/features/system-status.md`
+- `docs/features/telemetry.md`
+- `docs/operations/deployment.md`
+- `docs/operations/runbook.md`
+- `docs/operations/testing.md`
+- `docs/operations/troubleshooting.md`
+- `docs/setup/configuration.md`
+- `docs/setup/environment.md`

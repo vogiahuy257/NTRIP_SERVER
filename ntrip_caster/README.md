@@ -1,43 +1,111 @@
-# NTRIP Caster — Setup, Development, Test and Deployment
+# NTRIP Caster Management & Observability Platform
 
-Project path used in this guide:
+Nền tảng quản lý NTRIP Caster phục vụ truyền dữ liệu hiệu chỉnh GNSS/RTK từ trạm **BASE** đến nhiều **Rover/UAV** theo thời gian thực. Hệ thống bao gồm TCP Caster, quản lý Station/Mountpoint/Rover Account, tự động phát hiện và provisioning thiết bị ESP32, telemetry, session tracking, cảnh báo, dashboard bản đồ và RTCM Flow Observability.
 
-```bash
-~/NTRIP/NTRIP_SERVER/ntrip_caster
+> Trạng thái hiện tại: **v0.1.0-beta** — đã hoàn thiện tính năng chính, cần field test và load test trước khi triển khai production diện rộng.
+
+## Chức năng chính
+
+- NTRIP TCP Caster nonblocking trên cổng mặc định `2101`.
+- Nhận Source stream từ BASE và fan-out RTCM đến nhiều Rover.
+- Parse RTCM3, đếm frame hợp lệ và lỗi CRC.
+- Quản lý Station, cấu hình Station và Mountpoint.
+- Tự động phát hiện ESP32 chưa được đăng ký và provisioning sau khi quản trị viên phê duyệt.
+- Quản lý Rover Account, giới hạn kết nối và phân quyền theo Mountpoint.
+- Lưu lịch sử Source/Rover session và thống kê lưu lượng.
+- Alert Engine với vòng đời Open → Acknowledged → Resolved.
+- Realtime Dashboard qua Laravel Reverb.
+- MapLibre map-first UI; chuyển trang không làm mất trạng thái bản đồ.
+- RTCM Flow Observability theo dõi `BASE → Caster → Rover`:
+  - Snapshot realtime 1 giây.
+  - Raw sample 5 giây, giữ mặc định 24 giờ.
+  - Rollup 1 phút, giữ mặc định 30 ngày.
+  - Biểu đồ throughput, fan-out, socket drain, latency, backlog và write events.
+  - Chẩn đoán nghẽn tại BASE, Caster hoặc từng Rover.
+- Responsive UI cho desktop, laptop, tablet và mobile.
+
+## Kiến trúc tổng quát
+
+```mermaid
+flowchart TD
+    BASE[BASE / ESP32 / GNSS Receiver] -->|NTRIP Source + RTCM3| CASTER[NTRIP TCP Caster :2101]
+    CASTER -->|RTCM fan-out| ROVER1[Rover / UAV 1]
+    CASTER -->|RTCM fan-out| ROVERN[Rover / UAV N]
+
+    CASTER -->|Session & traffic metrics| DB[(SQLite / Database)]
+    BASE -->|HTTP telemetry & config polling| API[Laravel HTTP API]
+    API --> DB
+
+    CASTER -->|UDP cumulative snapshots| OBS[ntrip:observe]
+    OBS -->|5 s samples| DB
+    OBS -->|1 s snapshot| CACHE[Latest snapshot cache]
+    OBS -->|Realtime event| REVERB[Laravel Reverb]
+
+    DB --> DASH[React / Inertia Dashboard]
+    CACHE --> DASH
+    REVERB --> DASH
+    DASH --> MAP[Persistent MapLibre background]
 ```
 
-The project contains Laravel, SQLite, Laravel Reverb, React/TypeScript and an NTRIP TCP caster on port `2101`.
+## Công nghệ
 
-## 1. One-time environment setup
+| Thành phần | Công nghệ |
+|---|---|
+| Backend | PHP 8.3, Laravel 13, Sanctum, Fortify |
+| Realtime | Laravel Reverb, Laravel Echo |
+| Frontend | React 19, TypeScript 5.7, Inertia 3 |
+| UI | Tailwind CSS 4, shadcn/ui, Radix UI, Lucide |
+| Charts | Recharts 3 + shadcn Chart |
+| Map | MapLibre GL |
+| Database mặc định | SQLite |
+| Queue/Scheduler | Laravel Queue, Laravel Scheduler |
+| Test/Quality | Pest, PHPUnit, PHPStan/Larastan, Pint, ESLint, Prettier |
+
+## Yêu cầu môi trường
+
+- Ubuntu Linux.
+- PHP `8.3` và các extension cần thiết: `bcmath`, `curl`, `intl`, `mbstring`, `pcntl`, `pdo_sqlite`, `xml`, `zip`.
+- Composer.
+- Node.js `>= 20`; khuyến nghị Node.js 22.
+- npm.
+- SQLite 3.
+- Git, curl, unzip, netcat.
+- Nginx và Supervisor cho production.
+
+## Cài đặt nhanh
+
+### 1. Chuẩn bị môi trường một lần
 
 ```bash
+cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
 chmod +x ntrip_project.sh
 ./ntrip_project.sh setup-env
 ./ntrip_project.sh check
 ```
 
-The script installs or checks PHP 8.3, Composer, SQLite, Node.js, npm, Nginx, Supervisor and required PHP extensions, including PCNTL availability.
-
-## 2. Project setup after clone or copy
+### 2. Cài dự án sau khi clone hoặc copy
 
 ```bash
 cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
 ./ntrip_project.sh setup-project
 ```
 
-This performs:
+Lệnh trên thực hiện:
 
 ```text
 composer install
 npm install
 create database/database.sqlite if missing
-php artisan key:generate when APP_KEY is empty
+create .env from .env.example if missing
+generate APP_KEY when needed
 php artisan optimize:clear
 php artisan migrate
 npm run build
 ```
 
-Required `.env` values:
+### 3. Cấu hình `.env`
+
+Cấu hình tối thiểu cho local development:
 
 ```env
 APP_NAME="NTRIP Caster"
@@ -46,6 +114,8 @@ APP_DEBUG=true
 APP_URL=http://127.0.0.1:8000
 
 DB_CONNECTION=sqlite
+QUEUE_CONNECTION=database
+CACHE_STORE=file
 
 BROADCAST_CONNECTION=reverb
 
@@ -63,198 +133,117 @@ VITE_REVERB_SCHEME="${REVERB_SCHEME}"
 
 NTRIP_HOST=0.0.0.0
 NTRIP_PORT=2101
+NTRIP_PUBLIC_HOST=127.0.0.1
+NTRIP_MANAGEMENT_PORT=8000
+NTRIP_PROVISIONING_KEY=replace-with-a-long-random-secret
+
+NTRIP_OBSERVABILITY_ENABLED=true
+NTRIP_OBSERVABILITY_DRIVER=udp
+NTRIP_OBSERVABILITY_SNAPSHOT_MS=1000
+NTRIP_OBSERVABILITY_HOST=127.0.0.1
+NTRIP_OBSERVABILITY_PORT=22101
+NTRIP_OBSERVABILITY_BIND_HOST=127.0.0.1
+NTRIP_OBSERVABILITY_LATEST_CACHE_STORE=file
+NTRIP_OBSERVABILITY_LATEST_TTL_SECONDS=10
 ```
 
-Install broadcasting only once if Reverb has not yet been configured:
+Không commit `.env`, Source Token, Rover password hoặc provisioning key vào Git.
+
+## Chạy local development
+
+Cách khuyến nghị:
 
 ```bash
-php artisan install:broadcasting
-npm install
+cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
+composer dev
 ```
 
-## 3. Verify SQLite
-
-```bash
-php artisan db:show
-sqlite3 database/database.sqlite ".tables"
-php artisan migrate:status
-```
-
-Expected NTRIP tables:
+Script `composer dev` hiện nên chạy đồng thời:
 
 ```text
-stations
-station_configs
-mountpoints
-station_telemetries
-ntrip_sessions
+Laravel HTTP server       :8000
+Queue worker              default, alerts
+Laravel scheduler
+Laravel Pail logs
+Vite development server   :5173
+NTRIP Caster              :2101
+Observability collector   UDP :22101
+Laravel Reverb            :8080
 ```
 
-## 4. Local development runtime
+Không chạy thêm `reverb:start`, `ntrip:serve` hoặc `ntrip:observe` ở terminal khác khi `composer dev` đã chạy các process này, tránh lỗi trùng cổng.
 
-Terminal 1 — Laravel and Vite:
-
-```bash
-cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
-composer run dev
-```
-
-Terminal 2 — Reverb:
+### Chạy từng process để debug
 
 ```bash
-cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
-php artisan reverb:start \
-    --host=0.0.0.0 \
-    --port=8080 \
-    --debug
-```
-
-Terminal 3 — NTRIP caster:
-
-```bash
-cd ~/NTRIP/NTRIP_SERVER/ntrip_caster
+php artisan serve --host=0.0.0.0 --port=8000
+npm run dev -- --host=0.0.0.0 --port=5173
+php artisan queue:listen --queue=default,alerts --tries=2 --timeout=30
+php artisan schedule:work
+php artisan reverb:start --host=0.0.0.0 --port=8080 --debug
 php artisan ntrip:serve
+php artisan ntrip:observe
 ```
 
-Open:
-
-```text
-http://127.0.0.1:8000
-```
-
-Check ports:
-
-```bash
-ss -lntp | grep -E '8000|8080|2101'
-```
-
-## 5. Quick backend checks
+## Kiểm tra nhanh
 
 ```bash
 curl http://127.0.0.1:8000/up
 curl http://127.0.0.1:8000/api/health
 curl http://127.0.0.1:8000/api/v1/system/status
-curl http://127.0.0.1:8000/api/v1/ntrip/sessions/active
-```
 
-Sourcetable:
-
-```bash
 printf "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n" \
     | nc 127.0.0.1 2101
+
+ss -lntp | grep -E '8000|8080|2101|22101'
 ```
 
-## 6. Graceful shutdown test
+Các API quản trị nằm trong `auth:sanctum` và `verified`; gọi bằng `curl` không có phiên đăng nhập sẽ nhận `401`.
 
-Start:
+## Kiểm tra chất lượng và test
 
 ```bash
-php artisan ntrip:serve
+composer test:backend
+composer types:check
+composer lint:check
+
+npm run format:check
+npm run lint:check
+npm run types:check
+npm run build
 ```
 
-Press `Ctrl+C`. The caster should close Source and Rover sockets, store final statistics and set `source_connected` to false.
-
-Test SIGTERM:
+Chạy toàn bộ pipeline:
 
 ```bash
-pgrep -af "artisan ntrip:serve"
-kill -TERM <PID>
+composer ci:check
 ```
 
-Inspect sessions:
+## Graceful shutdown
 
-```bash
-sqlite3 database/database.sqlite "
-SELECT
-    id,
-    connection_type,
-    disconnected_at,
-    bytes_transferred,
-    valid_rtcm_frames,
-    rtcm_crc_errors,
-    disconnect_reason
-FROM ntrip_sessions
-ORDER BY id DESC
-LIMIT 10;
-"
+Khi đang chạy `composer dev` hoặc `php artisan ntrip:serve`, nhấn `Ctrl+C`. Caster phải đóng Source/Rover sockets, hoàn tất session và cập nhật trạng thái Source.
+
+Dòng `exited with code SIGINT` là bình thường khi người dùng chủ động dừng process. Một syscall đang chờ UDP có thể bị SIGINT ngắt; không được coi là lỗi vận hành nếu chỉ xuất hiện trong lúc shutdown.
+
+## Production
+
+Không dùng `composer dev` trong production. Chạy Nginx + PHP-FPM cho HTTP và quản lý các process lâu dài bằng Supervisor hoặc systemd:
+
+```text
+queue worker
+scheduler hoặc cron artisan schedule:run
+reverb:start
+ntrip:serve
+ntrip:observe
 ```
 
-## 7. Clear generated state
-
-```bash
-./ntrip_project.sh clear
-```
-
-This clears Laravel caches, `public/build` and temporary logs. It does not delete SQLite data.
-
-Full database reset:
-
-```bash
-./ntrip_project.sh reset-db
-```
-
-This permanently deletes users, stations, mountpoints, telemetry and session history.
-
-## 8. Production deployment
-
-Use production `.env` values:
-
-```env
-APP_ENV=production
-APP_DEBUG=false
-APP_URL=https://your-domain.example
-
-DB_CONNECTION=sqlite
-BROADCAST_CONNECTION=reverb
-
-REVERB_HOST=127.0.0.1
-REVERB_PORT=8080
-REVERB_SCHEME=http
-
-NTRIP_HOST=0.0.0.0
-NTRIP_PORT=2101
-```
-
-Deploy:
+Triển khai build:
 
 ```bash
 ./ntrip_project.sh deploy
 ```
 
-The command runs production Composer install, frontend build, migrations and Laravel caches.
-
-Set permissions:
-
-```bash
-sudo chown -R "$USER":www-data ~/NTRIP/NTRIP_SERVER/ntrip_caster
-
-sudo chown -R www-data:www-data \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/storage \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/bootstrap/cache \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/database
-
-sudo chmod -R ug+rwX \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/storage \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/bootstrap/cache \
-    ~/NTRIP/NTRIP_SERVER/ntrip_caster/database
-```
-
-SQLite needs write permission for both `database/database.sqlite` and the `database/` directory because journal or WAL files may be created there.
-
-## 9. Production processes
-
-Do not use `composer run dev` in production.
-
-Run these under Supervisor or systemd:
-
-```bash
-php artisan reverb:start --host=127.0.0.1 --port=8080
-php artisan ntrip:serve
-```
-
-Nginx and PHP-FPM serve Laravel HTTP requests. Reverb and `ntrip:serve` are long-running processes.
-
-## 10. Firewall
+Mở firewall tối thiểu:
 
 ```bash
 sudo ufw allow 80/tcp
@@ -262,15 +251,59 @@ sudo ufw allow 443/tcp
 sudo ufw allow 2101/tcp
 ```
 
-Port `8080` should normally remain internal when Nginx proxies WebSocket traffic to Reverb.
+Giữ `8080` và `22101` nội bộ nếu Reverb được proxy bởi Nginx và Collector chạy cùng máy.
 
-## 11. Script commands
+## Cấu trúc chính
 
-```bash
-./ntrip_project.sh check
-./ntrip_project.sh setup-env
-./ntrip_project.sh setup-project
-./ntrip_project.sh clear
-./ntrip_project.sh reset-db
-./ntrip_project.sh deploy
+```text
+app/
+├── Console/Commands/          Artisan commands
+├── Events/                    Realtime domain events
+├── Http/Controllers/Api/      HTTP API
+├── Jobs/                      Queue jobs
+├── Models/                    Eloquent models
+└── Services/
+    ├── Alerts/                Alert Engine
+    ├── Dashboard/             Dashboard snapshot
+    ├── Devices/               Pending device & provisioning
+    ├── Ntrip/                 TCP Caster, auth, parser, sessions
+    └── Observability/         RTCM Flow metrics pipeline
+
+resources/js/
+├── components/                Shared UI and map components
+├── contexts/                  Persistent map dashboard state
+├── features/                  Feature modules
+├── pages/                     Inertia pages
+├── realtime/                  Echo contracts, reducers, resync
+└── pages/system/              RTCM Flow Observability UI
+
+database/migrations/           Database schema
+routes/api.php                 HTTP API routes
+routes/channels.php            Broadcast authorization
+routes/console.php             Scheduler definitions
+routes/web.php                 Inertia web routes
+docs/                          Detailed specifications and operations docs
 ```
+
+## Tài liệu chi tiết
+
+Bắt đầu tại [`docs/README.md`](docs/README.md).
+
+- [Kiến trúc hệ thống](docs/architecture/system-architecture.md)
+- [Cấu hình môi trường](docs/setup/configuration.md)
+- [NTRIP Caster](docs/features/ntrip-caster.md)
+- [Device discovery & provisioning](docs/features/device-provisioning.md)
+- [Station và telemetry](docs/features/stations.md)
+- [Mountpoint](docs/features/mountpoints.md)
+- [Rover Account & access control](docs/features/rover-access.md)
+- [NTRIP Sessions](docs/features/sessions.md)
+- [Alert Engine](docs/features/alerts.md)
+- [Realtime Dashboard](docs/features/dashboard-realtime.md)
+- [RTCM Flow Observability](docs/features/system-observability.md)
+- [HTTP API](docs/api/http-api.md)
+- [Realtime events](docs/api/realtime-events.md)
+- [Database](docs/data/database-schema.md)
+- [Testing](docs/operations/testing.md)
+- [Deployment](docs/operations/deployment.md)
+- [Runbook vận hành](docs/operations/runbook.md)
+- [Troubleshooting](docs/operations/troubleshooting.md)
