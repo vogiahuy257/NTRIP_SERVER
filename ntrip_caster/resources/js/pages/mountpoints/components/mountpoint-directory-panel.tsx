@@ -42,7 +42,7 @@ export function MountpointDirectoryPanel({
                         }
                         className={cn(
                             'group relative overflow-hidden rounded-control-lg border p-4 pr-11 transition',
-                            'bg-ntrip-cloud/75 border-ntrip-ink/8 shadow-ntrip-panel',
+                            'border-ntrip-ink/8 bg-ntrip-cloud/75 shadow-ntrip-panel',
                             'hover:-translate-y-0.5 hover:border-ntrip-teal/50 hover:shadow-ntrip-panel-soft',
                         )}
                     >

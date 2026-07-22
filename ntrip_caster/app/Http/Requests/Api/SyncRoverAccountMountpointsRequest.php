@@ -73,8 +73,8 @@ class SyncRoverAccountMountpointsRequest extends FormRequest
                     $validator->errors()->add(
                         "mountpoints.{$index}.max_connections",
                         implode(' ', [
-                            'Giới hạn trên Mountpoint không được',
-                            'lớn hơn giới hạn của Rover Account.',
+                            'The Mountpoint connection limit cannot',
+                            'exceed the Rover Account limit.',
                         ])
                     );
                 }
@@ -94,7 +94,7 @@ class SyncRoverAccountMountpointsRequest extends FormRequest
                 ) {
                     $validator->errors()->add(
                         "mountpoints.{$index}.expires_at",
-                        'expires_at phải sau starts_at.'
+                        'The expiration time must be later than the start time.'
                     );
                 }
             }

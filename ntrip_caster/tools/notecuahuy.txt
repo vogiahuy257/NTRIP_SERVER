@@ -59,3 +59,7 @@ echo "$HOST_IP"
 ------ debug server -----
 
 php artisan ntrip:observe --debug
+
+
+php artisan optimize:clear
+php artisan migrate:fresh

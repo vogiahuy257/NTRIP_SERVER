@@ -62,6 +62,23 @@ esp_err_t RuntimeConfigManager::initialize()
     /* hardware_id always comes from this ESP32, never from the server. */
     refresh_hardware_id();
 
+    ESP_LOGI(
+        TAG,
+        "Loaded config: provisioned=%s revision=%lu "
+        "device=%s mountpoint=%s uart_baud=%d "
+        "max_rtcm_age_ms=%lu",
+        cfg_.provisioned ? "true" : "false",
+        static_cast<unsigned long>(
+            cfg_.revision
+        ),
+        cfg_.device_id,
+        cfg_.mountpoint,
+        cfg_.uart_baud,
+        static_cast<unsigned long>(
+            cfg_.max_rtcm_age_ms
+        )
+    );
+
     return ESP_OK;
 }
 
@@ -102,6 +119,25 @@ esp_err_t RuntimeConfigManager::save(const RuntimeConfig &config)
     xSemaphoreTake(mutex_, portMAX_DELAY);
     cfg_ = normalized;
     xSemaphoreGive(mutex_);
+
+    ESP_LOGI(
+        TAG,
+        "Saved config: provisioned=%s revision=%lu "
+        "device=%s mountpoint=%s uart_baud=%d "
+        "max_rtcm_age_ms=%lu",
+        normalized.provisioned
+            ? "true"
+            : "false",
+        static_cast<unsigned long>(
+            normalized.revision
+        ),
+        normalized.device_id,
+        normalized.mountpoint,
+        normalized.uart_baud,
+        static_cast<unsigned long>(
+            normalized.max_rtcm_age_ms
+        )
+    );
 
     return ESP_OK;
 }

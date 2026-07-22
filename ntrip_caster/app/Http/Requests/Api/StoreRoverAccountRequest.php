@@ -52,7 +52,7 @@ class StoreRoverAccountRequest extends FormRequest
             'password' => [
                 'required',
                 'string',
-                'min:12',
+                'min:6',
                 'max:255',
                 'confirmed',
             ],
@@ -86,8 +86,8 @@ class StoreRoverAccountRequest extends FormRequest
     {
         return [
             'username.regex' => implode(' ', [
-                'Username chỉ được chứa chữ thường, số,',
-                'dấu chấm, gạch dưới và gạch ngang.',
+                'Username may contain lowercase letters, numbers,',
+                'dots, underscores, and hyphens only.',
             ]),
         ];
     }

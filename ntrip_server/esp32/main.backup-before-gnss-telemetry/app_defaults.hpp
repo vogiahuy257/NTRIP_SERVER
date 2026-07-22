@@ -9,7 +9,7 @@
 
 namespace app_defaults
 {
-inline constexpr char FIRMWARE_VERSION[] = "1.2.0";
+inline constexpr char FIRMWARE_VERSION[] = "1.1.0";
 
 inline constexpr bool WIFI_ENABLED = true;
 inline constexpr char WIFI_SSID[] = "CONHAMA";
@@ -51,7 +51,6 @@ inline constexpr std::size_t MAX_RTCM_FRAME = 1029;
 inline constexpr std::size_t RTCM_QUEUE_LENGTH = 24;
 
 inline constexpr uint32_t TELEMETRY_INTERVAL_MS = 2000;
-inline constexpr uint32_t MIN_TELEMETRY_INTERVAL_MS = 2000;
 inline constexpr uint32_t CONFIG_POLL_INTERVAL_MS = 30000;
 inline constexpr uint32_t PROVISIONING_POLL_INTERVAL_MS = 5000;
 inline constexpr uint32_t MAX_RTCM_AGE_MS = 1500;

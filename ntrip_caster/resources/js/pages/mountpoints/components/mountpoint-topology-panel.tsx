@@ -7,25 +7,28 @@ import {
     useEdgesState,
     useNodesState,
     useReactFlow,
-    type Edge,
-    type NodeTypes,
 } from '@xyflow/react';
+import type { Edge, NodeTypes } from '@xyflow/react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import { LoaderCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { RoverAccount } from '@/features/rover-accounts/types';
 import { cn } from '@/lib/utils';
 
 import { formatBitrate, formatBytes } from '../lib/mountpoint-data';
-import type { MountpointWithSessions } from '../types';
+
+import type { ActiveSession, MountpointWithSessions } from '../types';
 import {
     MountpointTopologyNode,
     RoverTopologyNode,
     StationTopologyNode,
-    type MountpointNodeData,
-    type RoverNodeData,
-    type StationNodeData,
-    type TopologyNode,
+} from './mountpoint-topology-nodes';
+import type {
+    MountpointNodeData,
+    RoverNodeData,
+    StationNodeData,
+    TopologyNode,
 } from './mountpoint-topology-nodes';
 
 const elk = new ELK();
@@ -42,6 +45,7 @@ export type SelectedTopologyEntity =
 
 type MountpointTopologyPanelProps = {
     mountpoints: MountpointWithSessions[];
+    roverAccounts: RoverAccount[];
     selectedEntity: SelectedTopologyEntity;
     onSelectEntity: (entity: SelectedTopologyEntity) => void;
 };
@@ -52,7 +56,59 @@ type ElkChild = {
     y?: number;
 };
 
-function createTopology(mountpoints: MountpointWithSessions[]): {
+function normalizeUsername(value: string | null): string {
+    return value?.trim().toLowerCase() ?? '';
+}
+
+function registeredAccountsForMountpoint(
+    accounts: RoverAccount[],
+    mountpointId: string,
+): Array<{
+    account: RoverAccount;
+    accessEnabled: boolean;
+}> {
+    return accounts.flatMap((account) => {
+        const assignedMountpoint = account.mountpoints.find(
+            (mountpoint) => String(mountpoint.id) === mountpointId,
+        );
+
+        if (assignedMountpoint === undefined) {
+            return [];
+        }
+
+        return [
+            {
+                account,
+                accessEnabled: assignedMountpoint.access?.enabled ?? true,
+            },
+        ];
+    });
+}
+
+function summarizeRemoteIps(sessions: ActiveSession[]): string | null {
+    const remoteIps = Array.from(
+        new Set(
+            sessions
+                .map((session) => session.remoteIp)
+                .filter((remoteIp): remoteIp is string => remoteIp !== null),
+        ),
+    );
+
+    if (remoteIps.length === 0) {
+        return null;
+    }
+
+    if (remoteIps.length === 1) {
+        return remoteIps[0];
+    }
+
+    return `${remoteIps[0]} +${remoteIps.length - 1}`;
+}
+
+function createTopology(
+    mountpoints: MountpointWithSessions[],
+    roverAccounts: RoverAccount[],
+): {
     nodes: TopologyNode[];
     edges: Edge[];
 } {
@@ -103,20 +159,109 @@ function createTopology(mountpoints: MountpointWithSessions[]): {
     for (const mountpoint of mountpoints) {
         const stationId = mountpoint.station?.id ?? 'unassigned';
         const mountpointNodeId = `mountpoint:${mountpoint.id}`;
+        const registeredAccounts = registeredAccountsForMountpoint(
+            roverAccounts,
+            mountpoint.id,
+        );
+        const registeredUsernames = new Set(
+            registeredAccounts.map(({ account }) =>
+                normalizeUsername(account.username),
+            ),
+        );
+
+        const roverCandidates: Array<{
+            id: string;
+            connected: boolean;
+            data: RoverNodeData;
+        }> = registeredAccounts.map(({ account, accessEnabled }) => {
+            const accountSessions = mountpoint.sessions.filter(
+                (session) =>
+                    normalizeUsername(session.username) ===
+                    normalizeUsername(account.username),
+            );
+            const bytesTransferred = accountSessions.reduce(
+                (total, session) => total + session.bytesTransferred,
+                0,
+            );
+
+            return {
+                id: `account:${account.id}`,
+                connected: accountSessions.length > 0,
+                data: {
+                    kind: 'rover',
+                    entityId: `account-${account.id}-mountpoint-${mountpoint.id}`,
+                    accountId: account.id,
+                    label: account.displayName ?? account.username,
+                    displayName: account.displayName,
+                    remoteIp: summarizeRemoteIps(accountSessions),
+                    username: account.username,
+                    bytesTransferred: formatBytes(bytesTransferred),
+                    connected: accountSessions.length > 0,
+                    sessionCount: accountSessions.length,
+                    accountStatus: account.status,
+                    accessEnabled,
+                },
+            };
+        });
+
+        for (const session of mountpoint.sessions) {
+            const normalizedSessionUsername = normalizeUsername(
+                session.username,
+            );
+
+            if (
+                normalizedSessionUsername !== '' &&
+                registeredUsernames.has(normalizedSessionUsername)
+            ) {
+                continue;
+            }
+
+            roverCandidates.push({
+                id: `session:${session.id}`,
+                connected: true,
+                data: {
+                    kind: 'rover',
+                    entityId: session.id,
+                    accountId: null,
+                    label: session.username ?? 'Unregistered Rover',
+                    displayName: null,
+                    remoteIp: session.remoteIp,
+                    username: session.username,
+                    bytesTransferred: formatBytes(session.bytesTransferred),
+                    connected: true,
+                    sessionCount: 1,
+                    accountStatus: 'unregistered',
+                    accessEnabled: true,
+                },
+            });
+        }
+
+        roverCandidates.sort((left, right) => {
+            if (left.connected !== right.connected) {
+                return left.connected ? -1 : 1;
+            }
+
+            return left.data.label.localeCompare(right.data.label);
+        });
+
+        const connectedRoverCount = roverCandidates.filter(
+            (candidate) => candidate.connected,
+        ).length;
 
         nodes.push({
             id: mountpointNodeId,
             type: 'mountpoint',
             position: { x: 0, y: 0 },
-            width: 260,
-            height: 115,
+            width: 270,
+            height: 120,
             data: {
                 kind: 'mountpoint',
                 entityId: mountpoint.id,
                 name: mountpoint.name,
                 identifier: mountpoint.identifier,
                 status: mountpoint.status,
-                roverCount: mountpoint.roverCount,
+                registeredRoverCount: registeredAccounts.length,
+                connectedRoverCount,
                 bitrate: formatBitrate(mountpoint.uploadBps),
             },
         });
@@ -137,30 +282,21 @@ function createTopology(mountpoints: MountpointWithSessions[]): {
             },
         });
 
-        const visibleSessions = mountpoint.sessions.slice(
+        const visibleRovers = roverCandidates.slice(
             0,
             MAX_VISIBLE_ROVERS_PER_MOUNTPOINT,
         );
 
-        for (const [index, session] of visibleSessions.entries()) {
-            const roverNodeId = `rover:${mountpoint.id}:${session.id}`;
+        for (const rover of visibleRovers) {
+            const roverNodeId = `rover:${mountpoint.id}:${rover.id}`;
 
             nodes.push({
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 230,
-                height: 100,
-                data: {
-                    kind: 'rover',
-                    entityId: session.id,
-                    label:
-                        session.username ??
-                        `Rover ${String(index + 1).padStart(2, '0')}`,
-                    remoteIp: session.remoteIp,
-                    username: session.username,
-                    bytesTransferred: formatBytes(session.bytesTransferred),
-                },
+                width: 250,
+                height: 108,
+                data: rover.data,
             });
 
             edges.push({
@@ -169,36 +305,48 @@ function createTopology(mountpoints: MountpointWithSessions[]): {
                 target: roverNodeId,
                 type: 'default',
                 className: 'ntrip-topology-edge',
-                animated: true,
+                animated: rover.connected,
                 interactionWidth: 24,
                 style: {
                     strokeDasharray: '5 7',
                     strokeLinecap: 'round',
-                    strokeWidth: 1.7,
-                    opacity: 0.76,
+                    strokeWidth: rover.connected ? 1.8 : 1.4,
+                    opacity: rover.connected ? 0.78 : 0.3,
                 },
             });
         }
 
-        const hiddenRoverCount =
-            mountpoint.sessions.length - visibleSessions.length;
+        const hiddenRoverCount = roverCandidates.length - visibleRovers.length;
 
         if (hiddenRoverCount > 0) {
+            const hiddenRovers = roverCandidates.slice(
+                MAX_VISIBLE_ROVERS_PER_MOUNTPOINT,
+            );
+            const hiddenSessionCount = hiddenRovers.reduce(
+                (total, rover) => total + rover.data.sessionCount,
+                0,
+            );
             const roverNodeId = `rover:${mountpoint.id}:overflow`;
 
             nodes.push({
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 230,
-                height: 100,
+                width: 250,
+                height: 108,
                 data: {
                     kind: 'rover',
                     entityId: `overflow-${mountpoint.id}`,
-                    label: `+${hiddenRoverCount} more rovers`,
+                    accountId: null,
+                    label: `+${hiddenRoverCount} more Rover Accounts`,
+                    displayName: null,
                     remoteIp: null,
                     username: null,
-                    bytesTransferred: 'Active sessions',
+                    bytesTransferred: 'Hidden by topology limit',
+                    connected: hiddenSessionCount > 0,
+                    sessionCount: hiddenSessionCount,
+                    accountStatus: 'unregistered',
+                    accessEnabled: true,
                 },
             });
 
@@ -208,13 +356,13 @@ function createTopology(mountpoints: MountpointWithSessions[]): {
                 target: roverNodeId,
                 type: 'default',
                 className: 'ntrip-topology-edge',
-                animated: true,
+                animated: hiddenSessionCount > 0,
                 interactionWidth: 24,
                 style: {
                     strokeDasharray: '5 7',
                     strokeLinecap: 'round',
-                    strokeWidth: 1.7,
-                    opacity: 0.5,
+                    strokeWidth: 1.5,
+                    opacity: hiddenSessionCount > 0 ? 0.55 : 0.26,
                 },
             });
         }
@@ -269,18 +417,23 @@ async function applyElkLayout(
 
 function MountpointTopologyCanvas({
     mountpoints,
+    roverAccounts,
     selectedEntity,
     onSelectEntity,
 }: MountpointTopologyPanelProps) {
-    const topology = useMemo(() => createTopology(mountpoints), [mountpoints]);
+    const topology = useMemo(
+        () => createTopology(mountpoints, roverAccounts),
+        [mountpoints, roverAccounts],
+    );
     const topologyRef = useRef(topology);
+    useEffect(() => {
+        topologyRef.current = topology;
+    }, [topology]);
     const initialFitCompletedRef = useRef(false);
     const [nodes, setNodes, onNodesChange] = useNodesState<TopologyNode>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [layouting, setLayouting] = useState(true);
     const { fitView } = useReactFlow<TopologyNode, Edge>();
-
-    topologyRef.current = topology;
 
     const structureKey = useMemo(() => {
         const nodeIds = topology.nodes

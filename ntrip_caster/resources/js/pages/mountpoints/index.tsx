@@ -14,31 +14,22 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useState,
-    type SyntheticEvent,
-} from 'react';
-import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SyntheticEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import type { RoverAccount } from '@/features/rover-accounts/types';
+import { useRoverAccounts } from '@/features/rover-accounts/use-rover-accounts';
 import { cn } from '@/lib/utils';
 
 import { MountpointDirectoryPanel } from './components/mountpoint-directory-panel';
 
-import {
-    MountpointTopologyPanel,
-    type SelectedTopologyEntity,
-} from './components/mountpoint-topology-panel';
+import { MountpointTopologyPanel } from './components/mountpoint-topology-panel';
+import type { SelectedTopologyEntity } from './components/mountpoint-topology-panel';
 import { MountpointUsersPanel } from './components/mountpoint-users-panel';
 
-import {
-    attachSessions,
-    buildRoverAccounts,
-    normalizeMountpoints,
-} from './lib/mountpoint-data';
+import { attachSessions, normalizeMountpoints } from './lib/mountpoint-data';
 
 import {
     mapDashboardSessionsToActiveSessions,
@@ -58,7 +49,7 @@ const TAB_ITEMS: Array<{
 }> = [
     { id: 'topology', label: 'Topology', icon: Network },
     { id: 'mountpoints', label: 'Mountpoints', icon: RadioTower },
-    { id: 'users', label: 'Users', icon: CircleUserRound },
+    { id: 'users', label: 'Rover Accounts', icon: CircleUserRound },
 ];
 
 function stopMapEvent(event: SyntheticEvent): void {
@@ -104,11 +95,19 @@ export default function MountpointsIndex() {
     const {
         stations: realtimeStations,
         activeSessionItems,
-        refresh: refreshDashboard,
-        isRefreshing: dashboardRefreshing,
         error: dashboardError,
         realtimeConnectionState,
     } = useMapDashboard();
+
+    const roverAccounts = useRoverAccounts();
+    const { accounts: roverAccountItems, loadAccount: loadRoverAccount } =
+        roverAccounts;
+    const [hydratedRoverAccounts, setHydratedRoverAccounts] = useState<
+        RoverAccount[]
+    >([]);
+    const [roverAccountTopologyError, setRoverAccountTopologyError] = useState<
+        string | null
+    >(null);
 
     const [activeTab, setActiveTab] = useState<PageTab>('topology');
     const [mountpoints, setMountpoints] = useState<MountpointRecord[]>([]);
@@ -117,20 +116,10 @@ export default function MountpointsIndex() {
     const [selectedEntity, setSelectedEntity] =
         useState<SelectedTopologyEntity>(null);
     const [loading, setLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false);
-
     const [mountpointError, setMountpointError] = useState<string | null>(null);
 
     const loadData = useCallback(
-        async (background = false, signal?: AbortSignal): Promise<void> => {
-            if (background) {
-                setRefreshing(true);
-            } else {
-                setLoading(true);
-            }
-
-            setMountpointError(null);
-
+        async (signal?: AbortSignal): Promise<void> => {
             try {
                 /*
                  * Chỉ tải metadata Mountpoint.
@@ -161,7 +150,6 @@ export default function MountpointsIndex() {
             } finally {
                 if (!signal?.aborted) {
                     setLoading(false);
-                    setRefreshing(false);
                 }
             }
         },
@@ -171,12 +159,91 @@ export default function MountpointsIndex() {
     useEffect(() => {
         const controller = new AbortController();
 
-        void loadData(false, controller.signal);
+        const timeoutId = window.setTimeout(() => {
+            void loadData(controller.signal);
+        }, 0);
 
         return () => {
+            window.clearTimeout(timeoutId);
             controller.abort();
         };
     }, [loadData]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadRoverAccountAccess = async (): Promise<void> => {
+            const accountsNeedingDetails = roverAccountItems.filter(
+                (account) =>
+                    account.mountpointCount > 0 &&
+                    account.mountpoints.length === 0,
+            );
+
+            if (accountsNeedingDetails.length === 0) {
+                return;
+            }
+
+            try {
+                const detailedAccounts = await Promise.all(
+                    accountsNeedingDetails.map((account) =>
+                        loadRoverAccount(account.id),
+                    ),
+                );
+
+                if (!cancelled) {
+                    setHydratedRoverAccounts(detailedAccounts);
+                    setRoverAccountTopologyError(null);
+                }
+            } catch (reason) {
+                if (!cancelled) {
+                    setRoverAccountTopologyError(
+                        reason instanceof Error
+                            ? reason.message
+                            : 'Unable to load Rover Account access.',
+                    );
+                }
+            }
+        };
+
+        void loadRoverAccountAccess();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [loadRoverAccount, roverAccountItems]);
+
+    const topologyRoverAccounts = useMemo(() => {
+        const hydratedById = new Map(
+            hydratedRoverAccounts.map((account) => [account.id, account]),
+        );
+
+        return roverAccountItems.map((account) => {
+            if (
+                account.mountpointCount === 0 ||
+                account.mountpoints.length > 0
+            ) {
+                return account;
+            }
+
+            return hydratedById.get(account.id) ?? account;
+        });
+    }, [hydratedRoverAccounts, roverAccountItems]);
+
+    const roverAccountsByMountpointId = useMemo(() => {
+        const accountsByMountpoint = new Map<string, RoverAccount[]>();
+
+        for (const account of topologyRoverAccounts) {
+            for (const mountpoint of account.mountpoints) {
+                const mountpointId = String(mountpoint.id);
+                const accounts = accountsByMountpoint.get(mountpointId) ?? [];
+
+                accounts.push(account);
+                accountsByMountpoint.set(mountpointId, accounts);
+            }
+        }
+
+        return accountsByMountpoint;
+    }, [topologyRoverAccounts]);
 
     const realtimeSessions = useMemo(
         () => mapDashboardSessionsToActiveSessions(activeSessionItems),
@@ -218,16 +285,29 @@ export default function MountpointsIndex() {
                     (session) =>
                         `${session.username ?? ''} ${session.remoteIp ?? ''}`,
                 ),
+                ...(roverAccountsByMountpointId.get(mountpoint.id) ?? []).map(
+                    (account) =>
+                        `${account.username} ${account.displayName ?? ''}`,
+                ),
             ].some((value) => value.toLowerCase().includes(query));
         });
-    }, [enrichedMountpoints, searchQuery, statusFilter]);
+    }, [
+        enrichedMountpoints,
+        roverAccountsByMountpointId,
+        searchQuery,
+        statusFilter,
+    ]);
 
-    const accounts = useMemo(
-        () => buildRoverAccounts(filteredMountpoints),
-        [filteredMountpoints],
+    const hasUnhydratedRoverAccounts = topologyRoverAccounts.some(
+        (account) =>
+            account.mountpointCount > 0 && account.mountpoints.length === 0,
     );
     const realtimeActive = realtimeConnectionState === 'connected';
-    const visibleError = mountpointError ?? dashboardError;
+    const visibleError =
+        mountpointError ??
+        roverAccounts.error ??
+        (hasUnhydratedRoverAccounts ? roverAccountTopologyError : null) ??
+        dashboardError;
 
     const statistics = useMemo(
         () => ({
@@ -238,12 +318,9 @@ export default function MountpointsIndex() {
             waiting: enrichedMountpoints.filter(
                 (mountpoint) => mountpoint.status === 'waiting-source',
             ).length,
-            rovers: enrichedMountpoints.reduce(
-                (total, mountpoint) => total + mountpoint.roverCount,
-                0,
-            ),
+            accounts: topologyRoverAccounts.length,
         }),
-        [enrichedMountpoints],
+        [enrichedMountpoints, topologyRoverAccounts.length],
     );
 
     return (
@@ -269,8 +346,17 @@ export default function MountpointsIndex() {
                                 Mountpoints
                             </h1>
                             <p className="mt-1 flex items-center gap-1.5 text-micro text-ntrip-ink/62">
-                                <span className={cn('size-1.5 rounded-full',realtimeActive ? 'bg-ntrip-teal' : 'bg-ntrip-amber')}/>
-                                {realtimeActive ? 'Topology updates in realtime' : 'Topology is using the latest snapshot'}
+                                <span
+                                    className={cn(
+                                        'size-1.5 rounded-full',
+                                        realtimeActive
+                                            ? 'bg-ntrip-teal'
+                                            : 'bg-ntrip-amber',
+                                    )}
+                                />
+                                {realtimeActive
+                                    ? 'Topology updates in realtime'
+                                    : 'Topology is using the latest snapshot'}
                             </p>
                         </div>
 
@@ -291,8 +377,8 @@ export default function MountpointsIndex() {
                                     tone="amber"
                                 />
                                 <Metric
-                                    label="Rovers"
-                                    value={statistics.rovers}
+                                    label="Accounts"
+                                    value={statistics.accounts}
                                 />
                             </div>
                         </div>
@@ -337,47 +423,53 @@ export default function MountpointsIndex() {
                                 })}
                             </nav>
 
-                            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none">
-                                <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-                                    <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-ntrip-ink" />
-                                    <Input
-                                        value={searchQuery}
-                                        onChange={(event) => {
-                                            setSearchQuery(event.target.value);
-                                        }}
-                                        placeholder="Search mountpoints, stations, rovers"
-                                        className="h-9 rounded-control-sm border-ntrip-ink/9 bg-ntrip-cloud/72 pl-9 text-micro"
-                                    />
-                                </div>
+                            {activeTab !== 'users' ? (
+                                <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:flex-none">
+                                    <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+                                        <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-ntrip-ink" />
+                                        <Input
+                                            value={searchQuery}
+                                            onChange={(event) => {
+                                                setSearchQuery(
+                                                    event.target.value,
+                                                );
+                                            }}
+                                            placeholder="Search mountpoints, stations, rovers"
+                                            className="h-9 rounded-control-sm border-ntrip-ink/9 bg-ntrip-cloud/72 pl-9 text-micro"
+                                        />
+                                    </div>
 
-                                <div className="relative">
-                                    <ListFilter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-ntrip-ink/34" />
-                                    <select
-                                        value={statusFilter}
-                                        onChange={(event) => {
-                                            setStatusFilter(
-                                                event.target
-                                                    .value as StatusFilter,
-                                            );
-                                        }}
-                                        className="h-9 rounded-control-sm border border-ntrip-ink/9 bg-ntrip-cloud/72 pr-8 pl-9 text-micro font-semibold outline-none"
-                                    >
-                                        <option value="all">
-                                            All statuses
-                                        </option>
-                                        <option value="online">Online</option>
-                                        <option value="waiting-source">
-                                            Waiting source
-                                        </option>
-                                        <option value="degraded">
-                                            Degraded
-                                        </option>
-                                        <option value="disabled">
-                                            Disabled
-                                        </option>
-                                    </select>
+                                    <div className="relative">
+                                        <ListFilter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-ntrip-ink/34" />
+                                        <select
+                                            value={statusFilter}
+                                            onChange={(event) => {
+                                                setStatusFilter(
+                                                    event.target
+                                                        .value as StatusFilter,
+                                                );
+                                            }}
+                                            className="h-9 rounded-control-sm border border-ntrip-ink/9 bg-ntrip-cloud/72 pr-8 pl-9 text-micro font-semibold outline-none"
+                                        >
+                                            <option value="all">
+                                                All statuses
+                                            </option>
+                                            <option value="online">
+                                                Online
+                                            </option>
+                                            <option value="waiting-source">
+                                                Waiting source
+                                            </option>
+                                            <option value="degraded">
+                                                Degraded
+                                            </option>
+                                            <option value="disabled">
+                                                Disabled
+                                            </option>
+                                        </select>
+                                    </div>
                                 </div>
-                            </div>
+                            ) : null}
                         </div>
 
                         {visibleError ? (
@@ -409,6 +501,7 @@ export default function MountpointsIndex() {
                                 >
                                     <MountpointTopologyPanel
                                         mountpoints={filteredMountpoints}
+                                        roverAccounts={topologyRoverAccounts}
                                         selectedEntity={selectedEntity}
                                         onSelectEntity={setSelectedEntity}
                                     />
@@ -438,7 +531,11 @@ export default function MountpointsIndex() {
                                         activeTab !== 'users' && 'hidden',
                                     )}
                                 >
-                                    <MountpointUsersPanel accounts={accounts} />
+                                    <MountpointUsersPanel
+                                        mountpoints={enrichedMountpoints}
+                                        accounts={topologyRoverAccounts}
+                                        roverAccounts={roverAccounts}
+                                    />
                                 </div>
                             </>
                         ) : null}

@@ -1,5 +1,12 @@
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { CircleUserRound, RadioTower, Server, Wifi } from 'lucide-react';
+import { Handle, Position } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
+import {
+    CircleUserRound,
+    RadioTower,
+    Server,
+    Wifi,
+    WifiOff,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
@@ -21,17 +28,27 @@ export type MountpointNodeData = {
     name: string;
     identifier: string | null;
     status: MountpointStatus;
-    roverCount: number;
+    registeredRoverCount: number;
+    connectedRoverCount: number;
     bitrate: string;
 };
+
+export type RoverTopologyStatus =
+    'active' | 'disabled' | 'expired' | 'unregistered';
 
 export type RoverNodeData = {
     kind: 'rover';
     entityId: string;
+    accountId: number | null;
     label: string;
+    displayName: string | null;
     remoteIp: string | null;
     username: string | null;
     bytesTransferred: string;
+    connected: boolean;
+    sessionCount: number;
+    accountStatus: RoverTopologyStatus;
+    accessEnabled: boolean;
 };
 
 export type TopologyNode =
@@ -159,8 +176,18 @@ export function MountpointTopologyNode({
                     </span>
 
                     <span className="rounded-full bg-ntrip-cloud/7 px-2 py-1 text-ntrip-cloud/58">
-                        {data.roverCount} rover
-                        {data.roverCount === 1 ? '' : 's'}
+                        {data.registeredRoverCount} registered
+                    </span>
+
+                    <span
+                        className={cn(
+                            'rounded-full px-2 py-1',
+                            data.connectedRoverCount > 0
+                                ? 'bg-ntrip-teal/12 text-ntrip-teal'
+                                : 'bg-ntrip-cloud/7 text-ntrip-cloud/58',
+                        )}
+                    >
+                        {data.connectedRoverCount} connected
                     </span>
 
                     <span className="rounded-full bg-ntrip-cloud/7 px-2 py-1 font-mono text-ntrip-cloud/58">
@@ -174,21 +201,77 @@ export function MountpointTopologyNode({
     );
 }
 
+function roverState(data: RoverNodeData): {
+    label: string;
+    dataStatus: 'online' | 'waiting-source' | 'disabled';
+    iconClass: string;
+} {
+    if (!data.accessEnabled) {
+        return {
+            label: 'Access disabled',
+            dataStatus: 'disabled',
+            iconClass: 'bg-ntrip-coral/12 text-ntrip-coral',
+        };
+    }
+
+    if (data.accountStatus === 'disabled') {
+        return {
+            label: 'Account disabled',
+            dataStatus: 'disabled',
+            iconClass: 'bg-ntrip-cloud/8 text-ntrip-cloud/46',
+        };
+    }
+
+    if (data.accountStatus === 'expired') {
+        return {
+            label: 'Account expired',
+            dataStatus: 'disabled',
+            iconClass: 'bg-ntrip-amber/12 text-ntrip-amber',
+        };
+    }
+
+    if (data.connected) {
+        return {
+            label: 'Connected',
+            dataStatus: 'online',
+            iconClass: 'bg-ntrip-teal/12 text-ntrip-teal',
+        };
+    }
+
+    return {
+        label:
+            data.accountStatus === 'unregistered'
+                ? 'Unregistered session'
+                : 'Registered · Offline',
+        dataStatus: 'waiting-source',
+        iconClass: 'bg-ntrip-cloud/8 text-ntrip-cloud/62',
+    };
+}
+
 export function RoverTopologyNode({
     data,
     selected,
 }: NodeProps<Node<RoverNodeData, 'rover'>>) {
+    const state = roverState(data);
+
     return (
         <>
             <HiddenHandle type="target" position={Position.Left} />
 
             <NodeShell selected={selected}>
                 <div className="flex items-center gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-control-xs bg-ntrip-cloud/8 text-ntrip-cloud/72">
-                        {data.username ? (
+                    <span
+                        className={cn(
+                            'grid size-9 shrink-0 place-items-center rounded-control-xs',
+                            state.iconClass,
+                        )}
+                    >
+                        {data.connected ? (
+                            <Wifi className="size-4" />
+                        ) : data.username ? (
                             <CircleUserRound className="size-4" />
                         ) : (
-                            <Wifi className="size-4" />
+                            <WifiOff className="size-4" />
                         )}
                     </span>
 
@@ -197,22 +280,24 @@ export function RoverTopologyNode({
                             {data.label}
                         </p>
                         <p className="mt-0.5 truncate font-mono text-2xs text-ntrip-cloud/45">
-                            {data.remoteIp ?? 'Unknown remote IP'}
+                            {data.username ?? data.remoteIp ?? 'Unknown Rover'}
                         </p>
                     </div>
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-3 text-2xs">
                     <span
-                        data-status="online"
+                        data-status={state.dataStatus}
                         className="ntrip-status-inline inline-flex items-center gap-1.5"
                     >
                         <span className="ntrip-status-inline__dot size-2 rounded-full" />
-                        Connected
+                        {state.label}
                     </span>
 
                     <span className="font-mono text-ntrip-cloud/52">
-                        {data.bytesTransferred}
+                        {data.connected
+                            ? `${data.sessionCount} session${data.sessionCount === 1 ? '' : 's'} · ${data.bytesTransferred}`
+                            : '0 sessions'}
                     </span>
                 </div>
             </NodeShell>

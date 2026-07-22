@@ -63,7 +63,7 @@ class UpdateRoverAccountRequest extends FormRequest
                 'sometimes',
                 'nullable',
                 'string',
-                'min:12',
+                'min:6',
                 'max:255',
                 'confirmed',
             ],
