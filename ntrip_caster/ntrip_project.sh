@@ -852,9 +852,17 @@ install_project_dependencies() {
         npm install
     fi
 
-    if ! grep -qE '^APP_KEY=base64:' .env; then
+    APP_KEY_VALUE="$(
+        grep -m1 '^APP_KEY=' .env 2>/dev/null |
+        cut -d= -f2- |
+        tr -d '"'\'''
+    )"
+
+    if [[ -z "$APP_KEY_VALUE" ]]; then
         log "Generating the Laravel application key"
         php artisan key:generate --force
+    else
+        ok "Laravel APP_KEY is already configured."
     fi
 
     log "Clearing Laravel file caches before database migration"
