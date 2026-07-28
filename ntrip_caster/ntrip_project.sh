@@ -18,7 +18,10 @@ APP_NAME="${APP_NAME:-NtripCaster}"
 # Backward-compatible aliases: PUBLIC_HOSTNAME, PUBLIC_IP and APP_HOST.
 PUBLISH_HOST_OVERRIDE="${PUBLISH_HOST:-${PUBLIC_HOSTNAME:-${PUBLIC_IP:-${APP_HOST:-}}}}"
 APP_SCHEME="${APP_SCHEME:-http}"
-HTTP_PORT="${HTTP_PORT:-80}"
+HTTP_PORT="${HTTP_PORT:-8000}"
+VITE_PORT="${VITE_PORT:-5173}"
+SSH_PORT="${SSH_PORT:-22}"
+EXPOSE_VITE_DEV="${EXPOSE_VITE_DEV:-false}"
 APP_URL_OVERRIDE="${APP_URL:-}"
 LOCAL_IP_OVERRIDE="${LOCAL_IP:-}"
 REQUIRE_PUBLIC_DNS="${REQUIRE_PUBLIC_DNS:-true}"
@@ -374,8 +377,7 @@ resolve_network_identity() {
 
     local -a sanctum_entries=(
         "$PUBLISH_HOST_RESOLVED"
-        "${PUBLISH_HOST_RESOLVED}:80"
-        "${PUBLISH_HOST_RESOLVED}:443"
+        "${PUBLISH_HOST_RESOLVED}:${HTTP_PORT}"
         "localhost"
         "localhost:${HTTP_PORT}"
         "127.0.0.1"
@@ -403,7 +405,11 @@ print_network_identity() {
     else
         warn "This deployment is using a raw public IP for testing. HTTPS certificates and stable client configuration are easier after assigning a domain."
     fi
-    warn "For Internet access, also open/forward TCP ports ${HTTP_PORT}, ${REVERB_PORT} and ${NTRIP_PORT} in the cloud firewall or edge router."
+    warn "Required Internet TCP ports: ${SSH_PORT} SSH, ${HTTP_PORT} Laravel Web/API, ${REVERB_PORT} Reverb and ${NTRIP_PORT} NTRIP."
+
+    if is_true "$EXPOSE_VITE_DEV"; then
+        warn "Vite development/HMR is enabled on TCP ${VITE_PORT}. Restrict this port to your development IP."
+    fi
 }
 
 require_supported_os() {
@@ -737,6 +743,11 @@ configure_deployment_env() {
 
     # Vite and Reverb
     set_env_value VITE_APP_NAME '${APP_NAME}'
+    set_env_value VITE_APP_URL "$APP_URL"
+    set_env_value VITE_DEV_HOST "0.0.0.0"
+    set_env_value VITE_DEV_PORT "$VITE_PORT"
+    set_env_value VITE_DEV_SERVER_ENABLED "$EXPOSE_VITE_DEV"
+
     set_env_value REVERB_APP_ID "$reverb_app_id"
     set_env_value REVERB_APP_KEY "$reverb_app_key"
     set_env_value REVERB_APP_SECRET "$reverb_app_secret"
@@ -1114,10 +1125,19 @@ configure_firewall_if_active() {
 
     if $SUDO ufw status 2>/dev/null | grep -q '^Status: active'; then
         log "Opening required ports in the active UFW firewall"
+        $SUDO ufw allow "${SSH_PORT}/tcp"
         $SUDO ufw allow "${HTTP_PORT}/tcp"
         $SUDO ufw allow "${REVERB_PORT}/tcp"
         $SUDO ufw allow "${NTRIP_PORT}/tcp"
-        ok "UFW rules added for HTTP, Reverb and NTRIP."
+
+        if is_true "$EXPOSE_VITE_DEV"; then
+            $SUDO ufw allow "${VITE_PORT}/tcp"
+        fi
+        ok "UFW rules added for SSH, Laravel Web/API, Reverb and NTRIP."
+
+        if is_true "$EXPOSE_VITE_DEV"; then
+            ok "UFW rule added for Vite development server."
+        fi
     fi
 }
 
@@ -1401,7 +1421,10 @@ Common optional environment variables:
   REQUIRE_PUBLIC_DNS=true            Fail when the hostname does not resolve
   REVERB_PUBLIC_HOST=YOUR_PUBLIC_IP Optional Reverb public IP/FQDN override
   NTRIP_PUBLIC_HOST=YOUR_PUBLIC_IP  Optional NTRIP public IP/FQDN override
-  HTTP_PORT=80
+  HTTP_PORT=8000
+  VITE_PORT=5173
+  SSH_PORT=22
+  EXPOSE_VITE_DEV=false
   PHP_VERSION=8.3
   NODE_MAJOR=22
 

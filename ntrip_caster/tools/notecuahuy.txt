@@ -63,3 +63,5 @@ php artisan ntrip:observe --debug
 
 php artisan optimize:clear
 php artisan migrate:fresh
+
+bash ntrip_project.sh check
