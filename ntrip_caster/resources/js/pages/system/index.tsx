@@ -7,8 +7,6 @@ import {
     RefreshCw,
     Route,
     UsersRound,
-    Wifi,
-    WifiOff,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -34,17 +32,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 import { BottleneckDiagnosisCard } from './components/bottleneck-diagnosis-card';
+import { SystemStatusOverview } from './components/system-status-overview';
 import { ObservabilityHelpButton } from './components/observability-help-button';
 import { RoverRealtimeDetails } from './components/rover-realtime-details';
 import { RtcmFlowSecondaryCharts } from './components/rtcm-flow-secondary-charts';
 import { useRtcmFlowObservability } from './hooks/use-rtcm-flow-observability';
+import { useSystemStatus } from './hooks/use-system-status';
 import type { ObservabilityHelpId } from './lib/observability-help';
 import { diagnoseRtcmFlow } from './lib/rtcm-flow-diagnosis';
 import {
     formatCount,
     formatDuration,
     formatRatio,
-    formatSnapshotAge,
     formatThroughput,
     formatTimeLabel,
 } from './lib/rtcm-flow-view';
@@ -104,15 +103,20 @@ export default function SystemIndex() {
         isInitialLoading,
         isRefreshing,
         isHistoryLoading,
-        isRealtimeConnected,
         isRealtimeResyncing,
-        isStale,
-        snapshotAgeMs,
         snapshotError,
         historyError,
         refresh,
         reloadHistory,
     } = useRtcmFlowObservability();
+
+    const {
+        status: systemStatus,
+        error: systemStatusError,
+        isInitialLoading: isSystemStatusInitialLoading,
+        isRefreshing: isSystemStatusRefreshing,
+        refresh: refreshSystemStatus,
+    } = useSystemStatus();
 
     const throughputData = useMemo(
         () =>
@@ -141,11 +145,12 @@ export default function SystemIndex() {
     const handleRefresh = (): void => {
         void refresh();
         reloadHistory();
+        void refreshSystemStatus();
     };
 
     return (
         <>
-            <Head title="System Observability" />
+            <Head title="System Status & RTCM Observability" />
 
             <div className="pointer-events-none absolute inset-0 min-h-0 min-w-0 overflow-hidden">
                 <section className="ntrip-glass-panel-strong pointer-events-auto flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-panel">
@@ -175,6 +180,14 @@ export default function SystemIndex() {
 
                     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-5">
                         <div className="grid w-full min-w-0 gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-4">
+                            <SystemStatusOverview
+                                status={systemStatus}
+                                error={systemStatusError}
+                                loading={isSystemStatusInitialLoading}
+                                refreshing={isSystemStatusRefreshing}
+                                onRefresh={refreshSystemStatus}
+                            />
+
                             <section className="ntrip-section grid min-w-0 grid-cols-1 gap-3 rounded-2xl p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[minmax(12rem,1fr)_minmax(10rem,0.65fr)_minmax(10rem,0.65fr)_auto]">
                                 <div className="flex min-w-0 items-center justify-between gap-3 sm:col-span-2 xl:col-span-4">
                                     <div className="min-w-0">
@@ -309,7 +322,9 @@ export default function SystemIndex() {
                                         variant="outline"
                                         className="h-9 w-full rounded-xl border-white/42 bg-ntrip-cloud/36 px-4 text-ntrip-ink shadow-ntrip-inset hover:bg-ntrip-cloud/62 xl:w-auto"
                                         disabled={
-                                            isRefreshing || isRealtimeResyncing
+                                            isRefreshing ||
+                                            isRealtimeResyncing ||
+                                            isSystemStatusRefreshing
                                         }
                                         onClick={handleRefresh}
                                     >
@@ -317,7 +332,8 @@ export default function SystemIndex() {
                                             className={cn(
                                                 'size-4',
                                                 (isRefreshing ||
-                                                    isRealtimeResyncing) &&
+                                                    isRealtimeResyncing ||
+                                                    isSystemStatusRefreshing) &&
                                                     'animate-spin',
                                             )}
                                         />
@@ -666,4 +682,3 @@ function EmptyChartState() {
         </div>
     );
 }
-
