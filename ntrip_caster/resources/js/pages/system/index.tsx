@@ -157,7 +157,7 @@ export default function SystemIndex() {
                                 </p>
 
                                 <div className="mt-0.5 flex min-w-0 items-center gap-2">
-                                    <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.04em] sm:text-2xl">
+                                    <h1 className="min-w-0 truncate text-xl font-semibold tracking-[-0.04em]">
                                         RTCM Flow Observability
                                     </h1>
 

@@ -6,6 +6,12 @@ NODE_MAJOR="${NODE_MAJOR:-22}"
 PROJECT_DIR="${PROJECT_DIR:-$(pwd)}"
 COMMAND="${1:-help}"
 
+POSTGRES_HOST="${POSTGRES_HOST:-127.0.0.1}"
+POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+POSTGRES_DB="${POSTGRES_DB:-ntrip_caster}"
+POSTGRES_USER="${POSTGRES_USER:-ntrip_app}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
+
 if [[ "${EUID}" -eq 0 ]]; then
     SUDO=""
 else
@@ -24,6 +30,7 @@ require_project() {
 
 check_command() {
     local name="$1"
+
     if command -v "$name" >/dev/null 2>&1; then
         ok "$name: $(command -v "$name")"
     else
@@ -36,15 +43,16 @@ check_environment() {
     local errors=0
     log "Checking environment"
 
-    for command_name in php composer node npm git curl unzip sqlite3; do
+    for command_name in php composer node npm git curl unzip psql pg_isready; do
         check_command "$command_name" || errors=$((errors + 1))
     done
 
     if command -v php >/dev/null 2>&1; then
         ok "PHP version: $(php -r 'echo PHP_VERSION;')"
+
         local required_extensions=(
             bcmath ctype curl dom fileinfo filter hash intl json mbstring
-            openssl pcntl pdo pdo_sqlite session tokenizer xml zip
+            openssl pcntl pdo pdo_pgsql session tokenizer xml zip
         )
         local loaded_extensions
         loaded_extensions="$(php -m | tr '[:upper:]' '[:lower:]')"
@@ -57,6 +65,15 @@ check_environment() {
                 errors=$((errors + 1))
             fi
         done
+    fi
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl is-active --quiet postgresql; then
+            ok "PostgreSQL service is active"
+        else
+            warn "PostgreSQL service is not active"
+            errors=$((errors + 1))
+        fi
     fi
 
     [[ "$errors" -eq 0 ]] || fail "Environment check found $errors problem(s)"
@@ -89,6 +106,7 @@ install_node() {
     if command -v node >/dev/null 2>&1; then
         local current_major
         current_major="$(node -p 'process.versions.node.split(".")[0]')"
+
         if (( current_major >= 20 )); then
             ok "Node.js already installed: $(node --version)"
             return
@@ -100,6 +118,212 @@ install_node() {
     $SUDO apt-get install -y nodejs
 }
 
+run_as_postgres() {
+    if [[ "${EUID}" -eq 0 ]]; then
+        runuser -u postgres -- "$@"
+    else
+        sudo -u postgres "$@"
+    fi
+}
+
+validate_postgres_identifier() {
+    local value="$1"
+    local label="$2"
+
+    [[ "$value" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
+        || fail "$label must match ^[A-Za-z_][A-Za-z0-9_]*$: $value"
+}
+
+read_env_value() {
+    local key="$1"
+    local env_file="$PROJECT_DIR/.env"
+    local value=""
+
+    [[ -f "$env_file" ]] || return 1
+
+    value="$(grep -m1 -E "^${key}=" "$env_file" 2>/dev/null | cut -d= -f2- || true)"
+    value="${value%$'\r'}"
+
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+        value="${value:1:${#value}-2}"
+        value="${value//\\\"/\"}"
+        value="${value//\\\\/\\}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+        value="${value:1:${#value}-2}"
+    fi
+
+    [[ -n "$value" ]] || return 1
+    printf '%s' "$value"
+}
+
+resolve_postgres_password() {
+    if [[ -n "$POSTGRES_PASSWORD" ]]; then
+        return
+    fi
+
+    local existing_password=""
+    existing_password="$(read_env_value DB_PASSWORD || true)"
+
+    if [[ -n "$existing_password" ]]; then
+        POSTGRES_PASSWORD="$existing_password"
+        return
+    fi
+
+    [[ -t 0 ]] || fail \
+        "POSTGRES_PASSWORD is required in non-interactive mode"
+
+    local password_confirm=""
+    read -r -s -p "PostgreSQL password for ${POSTGRES_USER}: " POSTGRES_PASSWORD
+    printf '\n'
+    [[ -n "$POSTGRES_PASSWORD" ]] || fail "PostgreSQL password cannot be empty"
+
+    read -r -s -p "Confirm PostgreSQL password: " password_confirm
+    printf '\n'
+    [[ "$POSTGRES_PASSWORD" == "$password_confirm" ]] \
+        || fail "PostgreSQL passwords do not match"
+}
+
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local env_file="$PROJECT_DIR/.env"
+
+    php -r '
+        $file = $argv[1];
+        $key = $argv[2];
+        $value = $argv[3];
+
+        if (str_contains($value, "\n") || str_contains($value, "\r")) {
+            fwrite(STDERR, "Environment values cannot contain newlines.\n");
+            exit(1);
+        }
+
+        $quoted = "\"" . addcslashes($value, "\\\"") . "\"";
+        $line = $key . "=" . $quoted;
+
+        $contents = file_exists($file)
+            ? file_get_contents($file)
+            : "";
+
+        $pattern = "/^" . preg_quote($key, "/") . "=.*$/m";
+
+        if (preg_match($pattern, $contents) === 1) {
+            $contents = preg_replace($pattern, $line, $contents, 1);
+        } else {
+            if ($contents !== "" && ! str_ends_with($contents, "\n")) {
+                $contents .= "\n";
+            }
+
+            $contents .= $line . "\n";
+        }
+
+        file_put_contents($file, $contents);
+    ' "$env_file" "$key" "$value"
+}
+
+configure_env_postgres() {
+    require_project
+    cd "$PROJECT_DIR"
+
+    if [[ ! -f .env ]]; then
+        cp .env.example .env
+        warn ".env was created from .env.example"
+    fi
+
+    resolve_postgres_password
+
+    # DB_URL may override the individual DB_* values in Laravel.
+    sed -i -E '/^DB_URL=/d' .env
+
+    set_env_value DB_CONNECTION pgsql
+    set_env_value DB_HOST "$POSTGRES_HOST"
+    set_env_value DB_PORT "$POSTGRES_PORT"
+    set_env_value DB_DATABASE "$POSTGRES_DB"
+    set_env_value DB_USERNAME "$POSTGRES_USER"
+    set_env_value DB_PASSWORD "$POSTGRES_PASSWORD"
+
+    chmod 600 .env
+    ok "Laravel .env configured for PostgreSQL"
+}
+
+setup_postgres() {
+    validate_postgres_identifier "$POSTGRES_DB" "POSTGRES_DB"
+    validate_postgres_identifier "$POSTGRES_USER" "POSTGRES_USER"
+
+    if [[ "$POSTGRES_HOST" != "127.0.0.1" && "$POSTGRES_HOST" != "localhost" ]]; then
+        fail "setup-db creates a local PostgreSQL database only. Current POSTGRES_HOST=$POSTGRES_HOST"
+    fi
+
+    resolve_postgres_password
+
+    log "Starting PostgreSQL"
+    $SUDO systemctl enable --now postgresql
+
+    log "Creating or updating PostgreSQL role"
+    run_as_postgres psql \
+        --dbname=postgres \
+        --set=ON_ERROR_STOP=1 \
+        --set=db_user="$POSTGRES_USER" \
+        --set=db_password="$POSTGRES_PASSWORD" <<'SQL'
+SELECT format(
+    'CREATE ROLE %I LOGIN PASSWORD %L',
+    :'db_user',
+    :'db_password'
+)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'db_user'
+)
+\gexec
+
+SELECT format(
+    'ALTER ROLE %I WITH LOGIN PASSWORD %L',
+    :'db_user',
+    :'db_password'
+)
+\gexec
+SQL
+
+    log "Creating PostgreSQL database when missing"
+    run_as_postgres psql \
+        --dbname=postgres \
+        --set=ON_ERROR_STOP=1 \
+        --set=db_name="$POSTGRES_DB" \
+        --set=db_user="$POSTGRES_USER" <<'SQL'
+SELECT format(
+    'CREATE DATABASE %I OWNER %I ENCODING ''UTF8''',
+    :'db_name',
+    :'db_user'
+)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM pg_database
+    WHERE datname = :'db_name'
+)
+\gexec
+
+SELECT format(
+    'ALTER DATABASE %I OWNER TO %I',
+    :'db_name',
+    :'db_user'
+)
+\gexec
+SQL
+
+    log "Testing PostgreSQL application connection"
+    PGPASSWORD="$POSTGRES_PASSWORD" psql \
+        --host="$POSTGRES_HOST" \
+        --port="$POSTGRES_PORT" \
+        --username="$POSTGRES_USER" \
+        --dbname="$POSTGRES_DB" \
+        --set=ON_ERROR_STOP=1 \
+        --command='SELECT current_database(), current_user;' \
+        >/dev/null
+
+    ok "PostgreSQL database and application role are ready"
+}
+
 setup_env() {
     [[ "$(uname -s)" == "Linux" ]] || fail "This script supports Linux only"
     source /etc/os-release
@@ -108,10 +332,11 @@ setup_env() {
     log "Updating package metadata"
     $SUDO apt-get update
 
-    log "Installing base packages"
+    log "Installing base packages and PostgreSQL"
     $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
         ca-certificates curl git gnupg lsb-release netcat-openbsd nginx \
-        software-properties-common sqlite3 supervisor unzip
+        postgresql postgresql-client postgresql-contrib \
+        software-properties-common supervisor unzip
 
     if ! apt-cache show "php${PHP_VERSION}-cli" >/dev/null 2>&1; then
         log "Adding PHP repository"
@@ -129,24 +354,26 @@ setup_env() {
         "php${PHP_VERSION}-intl" \
         "php${PHP_VERSION}-mbstring" \
         "php${PHP_VERSION}-opcache" \
-        "php${PHP_VERSION}-sqlite3" \
+        "php${PHP_VERSION}-pgsql" \
         "php${PHP_VERSION}-xml" \
         "php${PHP_VERSION}-zip"
 
-    if [[ -x "/usr/bin/php${PHP_VERSION}" ]] && update-alternatives --list php >/dev/null 2>&1; then
+    if [[ -x "/usr/bin/php${PHP_VERSION}" ]] \
+        && update-alternatives --list php >/dev/null 2>&1; then
         $SUDO update-alternatives --set php "/usr/bin/php${PHP_VERSION}"
     fi
 
     install_composer
     install_node
 
+    $SUDO systemctl enable --now postgresql
+
     if ! php -m | grep -qi '^pcntl$'; then
         warn "PCNTL is not loaded. On Ubuntu it is normally included with PHP CLI."
         warn "Check with: php --ri pcntl"
     fi
 
-    warn "Services are installed but are not forced to start."
-    warn "Use composer run dev locally; enable production services separately."
+    warn "Nginx, PHP-FPM, Reverb, queue and NTRIP services still need production configuration."
     check_environment
 }
 
@@ -155,26 +382,31 @@ setup_project() {
     cd "$PROJECT_DIR"
 
     composer install
-    npm install
 
-    mkdir -p database
-    touch database/database.sqlite
+    if [[ -f package-lock.json ]]; then
+        npm ci
+    else
+        npm install
+    fi
 
     if [[ ! -f .env ]]; then
         cp .env.example .env
         warn ".env was created from .env.example"
     fi
 
+    configure_env_postgres
+    setup_postgres
+
     if ! grep -qE '^APP_KEY=base64:' .env; then
         php artisan key:generate
     fi
 
     php artisan optimize:clear
-    php artisan migrate
+    php artisan migrate --force
     npm run build
-    php artisan db:show
-    sqlite3 database/database.sqlite ".tables"
-    ok "Project setup completed"
+    php artisan db:show --database=pgsql
+
+    ok "Project setup completed with PostgreSQL"
 }
 
 clear_project() {
@@ -191,12 +423,12 @@ reset_database() {
     require_project
     cd "$PROJECT_DIR"
 
-    warn "This permanently deletes all application data."
+    warn "This permanently deletes all application tables and data in PostgreSQL."
     read -r -p "Type RESET to continue: " confirmation
     [[ "$confirmation" == "RESET" ]] || fail "Database reset cancelled"
 
     php artisan migrate:fresh --force
-    ok "Database reset completed"
+    ok "PostgreSQL database reset completed"
 }
 
 deploy_project() {
@@ -206,6 +438,10 @@ deploy_project() {
 
     if grep -qE '^APP_DEBUG=true' .env; then
         warn "APP_DEBUG=true is enabled. Disable it for production."
+    fi
+
+    if ! grep -qE '^DB_CONNECTION="?pgsql"?$' .env; then
+        fail "Production .env is not configured with DB_CONNECTION=pgsql"
     fi
 
     php artisan optimize:clear
@@ -225,8 +461,7 @@ deploy_project() {
 
     npm run build
 
-    mkdir -p database
-    touch database/database.sqlite
+    php artisan db:show --database=pgsql
     php artisan migrate --force
 
     php artisan config:cache
@@ -235,41 +470,59 @@ deploy_project() {
     php artisan event:cache
 
     mkdir -p storage/framework/{cache,sessions,views} bootstrap/cache
-    chmod -R ug+rwX storage bootstrap/cache database
+    chmod -R ug+rwX storage bootstrap/cache
 
-    ok "Deployment build completed"
-    warn "Start or restart Nginx, PHP-FPM, Reverb and ntrip:serve separately."
+    ok "Deployment build completed with PostgreSQL"
+    warn "Restart Nginx, PHP-FPM, Reverb, queue, observer and ntrip:serve separately."
 }
 
 show_help() {
     cat <<HELP
 Usage:
-  ./ntrip_project.sh setup-env
-  ./ntrip_project.sh check
-  ./ntrip_project.sh setup-project
-  ./ntrip_project.sh clear
-  ./ntrip_project.sh reset-db
-  ./ntrip_project.sh deploy
+  ./ntrip_project_postgresql.sh setup-env
+  ./ntrip_project_postgresql.sh check
+  ./ntrip_project_postgresql.sh setup-db
+  ./ntrip_project_postgresql.sh configure-db
+  ./ntrip_project_postgresql.sh setup-project
+  ./ntrip_project_postgresql.sh clear
+  ./ntrip_project_postgresql.sh reset-db
+  ./ntrip_project_postgresql.sh deploy
 
 Environment variables:
   PHP_VERSION=8.3
   NODE_MAJOR=22
   PROJECT_DIR=/absolute/path/to/ntrip_caster
 
+  POSTGRES_HOST=127.0.0.1
+  POSTGRES_PORT=5432
+  POSTGRES_DB=ntrip_caster
+  POSTGRES_USER=ntrip_app
+  POSTGRES_PASSWORD=strong-secret-password
+
 Examples:
-  ./ntrip_project.sh setup-env
+  ./ntrip_project_postgresql.sh setup-env
+
+  POSTGRES_DB=ntrip_caster \
+  POSTGRES_USER=ntrip_app \
+  POSTGRES_PASSWORD='replace-with-a-strong-password' \
+    ./ntrip_project_postgresql.sh setup-db
 
   PROJECT_DIR=\$HOME/NTRIP/NTRIP_SERVER/ntrip_caster \
-    ./ntrip_project.sh setup-project
+  POSTGRES_DB=ntrip_caster \
+  POSTGRES_USER=ntrip_app \
+  POSTGRES_PASSWORD='replace-with-a-strong-password' \
+    ./ntrip_project_postgresql.sh setup-project
 
   PROJECT_DIR=/var/www/ntrip_caster \
-    ./ntrip_project.sh deploy
+    ./ntrip_project_postgresql.sh deploy
 HELP
 }
 
 case "$COMMAND" in
     setup-env) setup_env ;;
     check) check_environment ;;
+    setup-db) setup_postgres ;;
+    configure-db) configure_env_postgres ;;
     setup-project) setup_project ;;
     clear) clear_project ;;
     reset-db) reset_database ;;

@@ -416,7 +416,7 @@ export default function MountpointsIndex() {
                                                     : 'text-ntrip-ink/44 hover:text-ntrip-ink',
                                             )}
                                         >
-                                            <Icon className="size-3.5" />
+                                            <Icon className="size-3.5 hidden xl:flex" />
                                             {item.label}
                                         </button>
                                     );

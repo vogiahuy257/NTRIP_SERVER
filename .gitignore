@@ -11,3 +11,5 @@
 /ntrip_server/**/*.zip
 /ntrip_client/**/*.zip
 /ntrip_caster/**/*.zip
+
+/Tools/note_server_atuan.txt
