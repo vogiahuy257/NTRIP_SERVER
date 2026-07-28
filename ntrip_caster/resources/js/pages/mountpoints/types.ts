@@ -1,6 +1,8 @@
 export type MountpointStatus =
     'online' | 'waiting-source' | 'degraded' | 'disabled';
 
+export type MountpointAccessMode = 'public' | 'authenticated';
+
 export type StationSummary = {
     id: string;
     deviceId: string;
@@ -20,6 +22,7 @@ export type MountpointRecord = {
     longitude: number | null;
     country: string | null;
     enabled: boolean;
+    accessMode: MountpointAccessMode;
     roverUsername: string | null;
     station: StationSummary | null;
     uploadBps: number;

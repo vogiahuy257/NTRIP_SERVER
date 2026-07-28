@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Models\Mountpoint;
 use Illuminate\Validation\Rule;
 
 class UpdateMountpointRequest extends FormRequest
@@ -90,6 +91,15 @@ class UpdateMountpointRequest extends FormRequest
                 'string',
                 'min:6',
                 'max:255',
+            ],
+
+            'access_mode' => [
+                'sometimes',
+                'string',
+                Rule::in([
+                    Mountpoint::ACCESS_PUBLIC,
+                    Mountpoint::ACCESS_AUTHENTICATED,
+                ]),
             ],
         ];
     }

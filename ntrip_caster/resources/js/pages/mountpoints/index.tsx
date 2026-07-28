@@ -36,7 +36,11 @@ import {
     mergeRealtimeStationsIntoMountpoints,
 } from './lib/mountpoint-realtime';
 
-import type { MountpointRecord, MountpointStatus } from './types';
+import type {
+    MountpointAccessMode,
+    MountpointRecord,
+    MountpointStatus,
+} from './types';
 
 type PageTab = 'topology' | 'mountpoints' | 'users';
 type StatusFilter = 'all' | MountpointStatus;
@@ -70,6 +74,30 @@ function readMessage(payload: unknown): string | null {
     return typeof message === 'string' ? message : null;
 }
 
+function readAccessMode(payload: unknown): MountpointAccessMode | null {
+    if (
+        typeof payload !== 'object' ||
+        payload === null ||
+        Array.isArray(payload)
+    ) {
+        return null;
+    }
+
+    const data = (payload as JsonObject).data;
+
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+        return null;
+    }
+
+    const accessMode = (data as JsonObject).access_mode;
+
+    if (accessMode === 'public' || accessMode === 'authenticated') {
+        return accessMode;
+    }
+
+    return null;
+}
+
 async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
     const response = await fetch(url, {
         signal,
@@ -89,6 +117,48 @@ async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
     }
 
     return payload;
+}
+
+async function updateMountpointAccessMode(
+    mountpointId: string,
+    accessMode: MountpointAccessMode,
+): Promise<MountpointAccessMode> {
+    const response = await fetch(`/api/v1/mountpoints/${mountpointId}`, {
+        method: 'PUT',
+
+        credentials: 'same-origin',
+
+        headers: {
+            Accept: 'application/json',
+
+            'Content-Type': 'application/json',
+
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+
+        body: JSON.stringify({
+            access_mode: accessMode,
+        }),
+    });
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+
+    if (!response.ok) {
+        throw new Error(
+            readMessage(payload) ??
+                `Unable to update Anonymous access. HTTP ${response.status}.`,
+        );
+    }
+
+    const savedAccessMode = readAccessMode(payload);
+
+    if (savedAccessMode === null) {
+        throw new Error(
+            'Server did not return the saved access_mode. Check UpdateMountpointRequest.',
+        );
+    }
+
+    return savedAccessMode;
 }
 
 export default function MountpointsIndex() {
@@ -117,6 +187,12 @@ export default function MountpointsIndex() {
         useState<SelectedTopologyEntity>(null);
     const [loading, setLoading] = useState(true);
     const [mountpointError, setMountpointError] = useState<string | null>(null);
+
+    const [accessModeError, setAccessModeError] = useState<string | null>(null);
+
+    const [updatingAccessModeIds, setUpdatingAccessModeIds] = useState<
+        Set<string>
+    >(() => new Set());
 
     const loadData = useCallback(
         async (signal?: AbortSignal): Promise<void> => {
@@ -151,6 +227,60 @@ export default function MountpointsIndex() {
                 if (!signal?.aborted) {
                     setLoading(false);
                 }
+            }
+        },
+        [],
+    );
+
+    const handleAnonymousAccessChange = useCallback(
+        async (
+            mountpointId: string,
+            anonymousEnabled: boolean,
+        ): Promise<void> => {
+            const requestedAccessMode: MountpointAccessMode = anonymousEnabled
+                ? 'public'
+                : 'authenticated';
+
+            setAccessModeError(null);
+
+            setUpdatingAccessModeIds((current) => {
+                const next = new Set(current);
+
+                next.add(mountpointId);
+
+                return next;
+            });
+
+            try {
+                const savedAccessMode = await updateMountpointAccessMode(
+                    mountpointId,
+                    requestedAccessMode,
+                );
+
+                setMountpoints((current) =>
+                    current.map((mountpoint) =>
+                        mountpoint.id === mountpointId
+                            ? {
+                                  ...mountpoint,
+                                  accessMode: savedAccessMode,
+                              }
+                            : mountpoint,
+                    ),
+                );
+            } catch (reason) {
+                setAccessModeError(
+                    reason instanceof Error
+                        ? reason.message
+                        : 'Unable to update Anonymous access.',
+                );
+            } finally {
+                setUpdatingAccessModeIds((current) => {
+                    const next = new Set(current);
+
+                    next.delete(mountpointId);
+
+                    return next;
+                });
             }
         },
         [],
@@ -304,6 +434,7 @@ export default function MountpointsIndex() {
     );
     const realtimeActive = realtimeConnectionState === 'connected';
     const visibleError =
+        accessModeError ??
         mountpointError ??
         roverAccounts.error ??
         (hasUnhydratedRoverAccounts ? roverAccountTopologyError : null) ??
@@ -416,7 +547,7 @@ export default function MountpointsIndex() {
                                                     : 'text-ntrip-ink/44 hover:text-ntrip-ink',
                                             )}
                                         >
-                                            <Icon className="size-3.5 hidden xl:flex" />
+                                            <Icon className="hidden size-3.5 xl:flex" />
                                             {item.label}
                                         </button>
                                     );
@@ -523,6 +654,12 @@ export default function MountpointsIndex() {
                                 >
                                     <MountpointDirectoryPanel
                                         mountpoints={filteredMountpoints}
+                                        updatingAccessModeIds={
+                                            updatingAccessModeIds
+                                        }
+                                        onAnonymousAccessChange={
+                                            handleAnonymousAccessChange
+                                        }
                                     />
                                 </div>
 

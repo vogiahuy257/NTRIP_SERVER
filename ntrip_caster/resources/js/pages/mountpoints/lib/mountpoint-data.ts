@@ -1,5 +1,6 @@
 import type {
     ActiveSession,
+    MountpointAccessMode,
     MountpointRecord,
     MountpointStatus,
     MountpointWithSessions,
@@ -64,6 +65,12 @@ function readNumber(
     }
 
     return null;
+}
+
+function readAccessMode(source: JsonObject | null): MountpointAccessMode {
+    const value = readString(source, 'access_mode', 'accessMode');
+
+    return value === 'authenticated' ? 'authenticated' : 'public';
 }
 
 function readBoolean(
@@ -179,6 +186,7 @@ export function normalizeMountpoints(payload: unknown): MountpointRecord[] {
                 longitude: readNumber(mountpoint, 'longitude', 'lon'),
                 country: readString(mountpoint, 'country'),
                 enabled: readBoolean(mountpoint, 'enabled') ?? true,
+                accessMode: readAccessMode(mountpoint),
                 roverUsername: readString(
                     mountpoint,
                     'rover_username',

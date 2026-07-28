@@ -30,9 +30,9 @@ inline constexpr int ETH_RMII_CLOCK_GPIO = 0;
 inline constexpr bool BOOTSTRAP_PROVISIONED = false;
 inline constexpr char BOOTSTRAP_DEVICE_ID[] = "CTUAV-BASE-REAL-001";
 inline constexpr char BOOTSTRAP_MOUNTPOINT[] = "CTUAV-RTCM-REAL-001";
-inline constexpr char BOOTSTRAP_PROVISIONING_KEY[] = "ctuav-real-base-001-development-token";
+inline constexpr char BOOTSTRAP_PROVISIONING_KEY[] = "fd3091e597c1d27cec5b197881b6c5edb2f071db810f5af073789ee9b3f9ed75";
 
-inline constexpr char CASTER_HOST[] = "ctuav-ntrip.local";
+inline constexpr char CASTER_HOST[] = "52.237.113.208";
 inline constexpr uint16_t CASTER_PORT = 2101;
 inline constexpr uint16_t MANAGEMENT_PORT = 8000;
 
