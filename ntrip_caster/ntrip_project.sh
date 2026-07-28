@@ -599,7 +599,7 @@ install_system_environment() {
 
     log "Installing base packages, Nginx, PostgreSQL and build tools"
     $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        ca-certificates curl dnsutils git gnupg iproute2 lsb-release nginx openssl \
+        acl ca-certificates curl dnsutils git gnupg iproute2 lsb-release nginx openssl \
         postgresql postgresql-client postgresql-contrib \
         software-properties-common unzip
 
@@ -925,6 +925,8 @@ configure_permissions() {
     require_project
     ensure_deploy_identity
 
+    log "Configuring Laravel and web-server permissions"
+
     mkdir -p \
         "$PROJECT_DIR/storage/framework/cache/data" \
         "$PROJECT_DIR/storage/framework/sessions" \
@@ -932,15 +934,64 @@ configure_permissions() {
         "$PROJECT_DIR/storage/logs" \
         "$PROJECT_DIR/bootstrap/cache"
 
+    # Cho phép PHP-FPM/Nginx đi xuyên qua các thư mục cha,
+    # đặc biệt khi dự án nằm trong /home/<user>/...
+    if command_exists setfacl; then
+        local current_path="$PROJECT_DIR"
+
+        while [[ "$current_path" != "/" ]]; do
+            $SUDO setfacl -m "u:www-data:--x" "$current_path"
+            current_path="$(dirname "$current_path")"
+        done
+
+        # PHP-FPM cần đọc source Laravel, vendor, routes, config và public.
+        $SUDO setfacl -R -m "u:www-data:r-X" "$PROJECT_DIR"
+    else
+        warn "setfacl is unavailable. Installing package 'acl' is recommended."
+
+        # Phương án dự phòng: chỉ cấp quyền traverse cho thư mục home.
+        if [[ "$PROJECT_DIR" == /home/* ]]; then
+            local home_directory
+            home_directory="/home/$(printf '%s' "$PROJECT_DIR" | cut -d/ -f3)"
+            $SUDO chmod o+x "$home_directory"
+        fi
+    fi
+
+    # storage và bootstrap/cache phải ghi được bởi Laravel.
     $SUDO chown -R "$DEPLOY_USER:$DEPLOY_GROUP" \
         "$PROJECT_DIR/storage" \
         "$PROJECT_DIR/bootstrap/cache"
 
-    $SUDO find "$PROJECT_DIR/storage" "$PROJECT_DIR/bootstrap/cache" -type d -exec chmod 2775 {} +
-    $SUDO find "$PROJECT_DIR/storage" "$PROJECT_DIR/bootstrap/cache" -type f -exec chmod 664 {} +
+    $SUDO find \
+        "$PROJECT_DIR/storage" \
+        "$PROJECT_DIR/bootstrap/cache" \
+        -type d -exec chmod 2775 {} +
+
+    $SUDO find \
+        "$PROJECT_DIR/storage" \
+        "$PROJECT_DIR/bootstrap/cache" \
+        -type f -exec chmod 664 {} +
+
+    # public chỉ cần đọc và traverse.
+    $SUDO find "$PROJECT_DIR/public" -type d -exec chmod 755 {} +
+    $SUDO find "$PROJECT_DIR/public" -type f -exec chmod 644 {} +
+
+    # index.php không cần quyền thực thi, PHP-FPM chỉ cần đọc.
+    $SUDO chmod 644 "$PROJECT_DIR/public/index.php"
+
     $SUDO chmod 640 "$ENV_FILE"
     $SUDO chown "$DEPLOY_USER:$DEPLOY_GROUP" "$ENV_FILE"
-    ok "Laravel runtime permissions configured for $DEPLOY_USER:$DEPLOY_GROUP."
+
+    # Xác minh user PHP-FPM thực sự đọc được Laravel entry point.
+    if ! $SUDO -u www-data test -r "$PROJECT_DIR/public/index.php"; then
+        fail "www-data cannot read $PROJECT_DIR/public/index.php"
+    fi
+
+    if ! $SUDO -u www-data test -r "$PROJECT_DIR/vendor/autoload.php"; then
+        fail "www-data cannot read $PROJECT_DIR/vendor/autoload.php"
+    fi
+
+    ok "Laravel runtime and Nginx/PHP-FPM permissions are configured."
 }
 
 artisan_has_command() {
@@ -1070,21 +1121,32 @@ configure_systemd_services() {
 configure_nginx() {
     require_project
     resolve_network_identity
-    [[ -S "$PHP_FPM_SOCKET" ]] || fail "PHP-FPM socket was not found: $PHP_FPM_SOCKET"
+
+    [[ -S "$PHP_FPM_SOCKET" ]] || \
+        fail "PHP-FPM socket was not found: $PHP_FPM_SOCKET"
+
+    [[ -f "$PROJECT_DIR/public/index.php" ]] || \
+        fail "Laravel public/index.php was not found."
 
     local site_file="/etc/nginx/sites-available/ntrip_caster"
+
     log "Configuring Nginx for Laravel on port $HTTP_PORT"
 
     $SUDO tee "$site_file" >/dev/null <<NGINX
 server {
     listen ${HTTP_PORT} default_server;
     listen [::]:${HTTP_PORT} default_server;
+
     server_name ${NGINX_SERVER_NAMES};
 
     root ${PROJECT_DIR}/public;
-    index index.php;
+    index index.php index.html;
+
     charset utf-8;
     client_max_body_size 20M;
+
+    access_log /var/log/nginx/ntrip_caster_access.log;
+    error_log /var/log/nginx/ntrip_caster_error.log;
 
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options SAMEORIGIN always;
@@ -1094,14 +1156,35 @@ server {
         try_files \$uri \$uri/ /index.php?\$query_string;
     }
 
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { access_log off; log_not_found off; }
+    location = /favicon.ico {
+        access_log off;
+        log_not_found off;
+    }
+
+    location = /robots.txt {
+        access_log off;
+        log_not_found off;
+    }
 
     location ~ \.php\$ {
         include snippets/fastcgi-php.conf;
+
         fastcgi_pass unix:${PHP_FPM_SOCKET};
+
         fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
         fastcgi_param DOCUMENT_ROOT \$realpath_root;
+
+        # Laravel/Inertia/Fortify có thể tạo response header lớn.
+        # Các buffer này ngăn lỗi:
+        # "upstream sent too big header"
+        fastcgi_buffer_size 32k;
+        fastcgi_buffers 16 16k;
+        fastcgi_busy_buffers_size 64k;
+        fastcgi_temp_file_write_size 64k;
+
+        fastcgi_connect_timeout 60s;
+        fastcgi_send_timeout 120s;
+        fastcgi_read_timeout 120s;
     }
 
     location ~ /\.(?!well-known).* {
@@ -1111,10 +1194,41 @@ server {
 NGINX
 
     $SUDO rm -f /etc/nginx/sites-enabled/default
-    $SUDO ln -sfn "$site_file" /etc/nginx/sites-enabled/ntrip_caster
+
+    $SUDO ln -sfn \
+        "$site_file" \
+        /etc/nginx/sites-enabled/ntrip_caster
+
+    log "Validating Nginx configuration"
     $SUDO nginx -t
+
     $SUDO systemctl enable --now "$PHP_FPM_SERVICE" nginx
-    $SUDO systemctl restart "$PHP_FPM_SERVICE" nginx
+    $SUDO systemctl restart "$PHP_FPM_SERVICE"
+    $SUDO systemctl restart nginx
+
+    log "Testing Laravel through Nginx"
+
+    local http_code
+    http_code="$(
+        curl \
+            --silent \
+            --show-error \
+            --output /dev/null \
+            --write-out '%{http_code}' \
+            --max-time 15 \
+            -H "Host: $APP_HOST" \
+            "http://127.0.0.1:${HTTP_PORT}/up" \
+            || true
+    )"
+
+    if [[ "$http_code" =~ ^(2|3)[0-9][0-9]$ ]]; then
+        ok "Nginx and Laravel responded with HTTP $http_code."
+    else
+        warn "Nginx/Laravel returned HTTP ${http_code:-000}."
+        $SUDO tail -n 30 /var/log/nginx/ntrip_caster_error.log 2>/dev/null || true
+        fail "Nginx configuration was created, but the Laravel health check failed."
+    fi
+
     ok "Nginx is serving the project at $APP_URL"
 }
 
@@ -1387,6 +1501,80 @@ When using a raw IP, rerun the command if the public IP changes.
 SUMMARY
 }
 
+release_project() {
+    require_project
+    acquire_lock
+
+    [[ -f "$ENV_FILE" ]] || \
+        fail ".env is missing. Run the full installation before using release."
+
+    cd "$PROJECT_DIR"
+
+    log "Starting CI/CD application release"
+    printf 'Project directory : %s\n' "$PROJECT_DIR"
+    printf 'Git commit        : %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+    log "Installing optimized PHP dependencies"
+    COMPOSER_ALLOW_SUPERUSER=1 composer install \
+        --no-dev \
+        --prefer-dist \
+        --no-interaction \
+        --optimize-autoloader
+
+    log "Installing exact Node.js dependencies"
+    if [[ -f package-lock.json ]]; then
+        npm ci
+    else
+        npm install
+    fi
+
+    log "Clearing Laravel file caches"
+
+    rm -f bootstrap/cache/*.php 2>/dev/null || true
+
+    mkdir -p \
+        storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache
+
+    php artisan config:clear
+    php artisan route:clear
+    php artisan view:clear
+    php artisan event:clear 2>/dev/null || true
+
+    log "Running pending PostgreSQL migrations"
+
+    # migrate chỉ chạy migration mới, không xóa database hiện có.
+    php artisan migrate --force
+
+    php artisan storage:link --force >/dev/null 2>&1 || true
+
+    log "Building production frontend"
+    npm run build
+
+    log "Caching Laravel production configuration"
+    php artisan config:cache
+    php artisan view:cache
+
+    php artisan route:cache || \
+        warn "Route cache was skipped because non-cacheable routes exist."
+
+    log "Restarting application services"
+
+    if [[ ! -x /usr/local/sbin/ntrip-restart-services ]]; then
+        fail "/usr/local/sbin/ntrip-restart-services was not found."
+    fi
+
+    sudo -n /usr/local/sbin/ntrip-restart-services
+
+    log "Checking deployment after release"
+    check_deployment
+
+    ok "CI/CD application release completed successfully."
+}
+
 reset_database() {
     require_project
     [[ -f "$ENV_FILE" ]] || fail ".env is missing."
@@ -1409,6 +1597,7 @@ Usage:
   ./ntrip_project.sh deploy          Install app dependencies, migrate and build
   ./ntrip_project.sh services        Configure Nginx and systemd services
   ./ntrip_project.sh reset-db        Destructively recreate all database tables
+  ./ntrip_project.sh release         Update code dependencies, migrate, build and restart services
   ./ntrip_project.sh help            Show this help
 
 Common optional environment variables:
@@ -1489,6 +1678,9 @@ case "$COMMAND" in
         configure_nginx
         configure_systemd_services
         configure_firewall_if_active
+        ;;
+    release|cicd-deploy)
+        release_project
         ;;
     reset-db)
         reset_database

@@ -65,3 +65,5 @@ php artisan optimize:clear
 php artisan migrate:fresh
 
 bash ntrip_project.sh check
+
+PUBLISH_HOST=52.237.113.208 bash ntrip_project.sh
