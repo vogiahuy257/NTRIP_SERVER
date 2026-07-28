@@ -852,15 +852,33 @@ install_project_dependencies() {
         npm install
     fi
 
-    if ! grep -qE '^APP_KEY="?base64:' "$ENV_FILE"; then
+    if ! grep -qE '^APP_KEY=base64:' .env; then
         log "Generating the Laravel application key"
         php artisan key:generate --force
     fi
 
-    php artisan optimize:clear
+    log "Clearing Laravel file caches before database migration"
+
+    # Không dùng optimize:clear ở đây vì CACHE_STORE=database
+    # và bảng cache có thể chưa được migration tạo ra.
+    rm -f bootstrap/cache/*.php 2>/dev/null || true
+
+    mkdir -p \
+        storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        bootstrap/cache
+
+    php artisan config:clear
+    php artisan route:clear
+    php artisan view:clear
+    php artisan event:clear
 
     log "Running PostgreSQL migrations"
     php artisan migrate --force
+
+    log "Clearing Laravel database cache after migrations"
+    php artisan cache:clear
 
     php artisan storage:link --force >/dev/null 2>&1 || true
 
