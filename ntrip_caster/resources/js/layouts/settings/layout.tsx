@@ -35,12 +35,12 @@ const SETTINGS_NAVIGATION: SettingsNavigationItem[] = [
         href: editSecurity().url,
         icon: ShieldCheck,
     },
-    {
-        title: 'Appearance',
-        description: 'Theme and display mode',
-        href: editAppearance().url,
-        icon: Palette,
-    },
+    // {
+    //     title: 'Appearance',
+    //     description: 'Theme and display mode',
+    //     href: editAppearance().url,
+    //     icon: Palette,
+    // },
 ];
 
 function resolveReturnUrl(pageUrl: string): string {
