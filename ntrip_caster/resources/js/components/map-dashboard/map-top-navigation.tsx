@@ -376,7 +376,7 @@ export function MapTopNavigation() {
                             align="end"
                             sideOffset={8}
                             className={cn(
-                                'ntrip-glass-panel',
+                                'ntrip-glass-panel-strong',
                                 'z-[120] w-72 overflow-hidden rounded-2xl',
                                 'border-white/42 p-1.5 shadow-ntrip-panel',
                             )}
