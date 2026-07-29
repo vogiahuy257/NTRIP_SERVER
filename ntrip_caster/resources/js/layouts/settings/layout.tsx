@@ -94,8 +94,9 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         >
             <DialogContent
                 surface="glass"
-                overlayClassName="bg-ntrip-ink/72 backdrop-blur-[3px]"
+                overlayClassName="bg-ntrip-ink/30 backdrop-blur-[3px]"
                 className={cn(
+                    'bg-[rgb(var(--ntrip-cloud)/0.64)]',
                     'h-[min(48rem,calc(100dvh-1rem))]',
                     'w-[calc(100%-1rem)] max-w-5xl',
                     'grid-rows-[auto_minmax(0,1fr)] gap-0',
