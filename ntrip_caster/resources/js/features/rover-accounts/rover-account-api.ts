@@ -1,3 +1,5 @@
+import { createApiHeaders } from '@/lib/api-headers';
+
 import {
     normalizeRoverAccountList,
     normalizeRoverAccountMountpointList,
@@ -34,53 +36,6 @@ function asObject(value: unknown): JsonObject | null {
     }
 
     return value as JsonObject;
-}
-
-function findCookie(name: string): string | null {
-    if (typeof document === 'undefined') {
-        return null;
-    }
-
-    const prefix = `${name}=`;
-    const cookie = document.cookie
-        .split(';')
-        .map((item) => item.trim())
-        .find((item) => item.startsWith(prefix));
-
-    return cookie === undefined
-        ? null
-        : decodeURIComponent(cookie.slice(prefix.length));
-}
-
-function createHeaders(hasBody: boolean): Record<string, string> {
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    if (hasBody) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    if (typeof document === 'undefined') {
-        return headers;
-    }
-
-    const csrfToken = document
-        .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-        ?.getAttribute('content');
-
-    if (csrfToken) {
-        headers['X-CSRF-TOKEN'] = csrfToken;
-    }
-
-    const xsrfToken = findCookie('XSRF-TOKEN');
-
-    if (xsrfToken) {
-        headers['X-XSRF-TOKEN'] = xsrfToken;
-    }
-
-    return headers;
 }
 
 function normalizeFieldErrors(value: unknown): RoverAccountFieldErrors {
@@ -192,7 +147,7 @@ export async function fetchRoverAccounts(
     const payload = await requestJson(`${BASE_ENDPOINT}?${parameters}`, {
         method: 'GET',
         signal,
-        headers: createHeaders(false),
+        headers: createApiHeaders(),
     });
 
     return normalizeRoverAccountList(payload);
@@ -205,7 +160,7 @@ export async function fetchRoverAccount(
     const payload = await requestJson(`${BASE_ENDPOINT}/${accountId}`, {
         method: 'GET',
         signal,
-        headers: createHeaders(false),
+        headers: createApiHeaders(),
     });
 
     return normalizeRoverAccountResponse(payload);
@@ -216,7 +171,7 @@ export async function createRoverAccount(
 ): Promise<RoverAccount> {
     const payload = await requestJson(BASE_ENDPOINT, {
         method: 'POST',
-        headers: createHeaders(true),
+        headers: createApiHeaders(true),
         body: JSON.stringify(accountPayload(input)),
     });
 
@@ -229,7 +184,7 @@ export async function updateRoverAccount(
 ): Promise<RoverAccount> {
     const payload = await requestJson(`${BASE_ENDPOINT}/${accountId}`, {
         method: 'PUT',
-        headers: createHeaders(true),
+        headers: createApiHeaders(true),
         body: JSON.stringify(accountPayload(input)),
     });
 
@@ -239,7 +194,7 @@ export async function updateRoverAccount(
 export async function deleteRoverAccount(accountId: number): Promise<void> {
     await requestJson(`${BASE_ENDPOINT}/${accountId}`, {
         method: 'DELETE',
-        headers: createHeaders(false),
+        headers: createApiHeaders(),
     });
 }
 
@@ -252,7 +207,7 @@ export async function fetchRoverAccountMountpoints(
         {
             method: 'GET',
             signal,
-            headers: createHeaders(false),
+            headers: createApiHeaders(),
         },
     );
 
@@ -267,7 +222,7 @@ export async function syncRoverAccountMountpoints(
         `${BASE_ENDPOINT}/${accountId}/mountpoints`,
         {
             method: 'PUT',
-            headers: createHeaders(true),
+            headers: createApiHeaders(true),
             body: JSON.stringify({
                 mountpoints: mountpoints.map((mountpoint) => ({
                     id: mountpoint.id,

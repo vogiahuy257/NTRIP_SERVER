@@ -9,15 +9,17 @@ import {
 } from 'lucide-react';
 import {
     useEffect,
-    useState,
-    type FormEvent,
-    type ReactNode,
-    type SyntheticEvent,
+    useState
+    
+    
+    
 } from 'react';
+import type {FormEvent, ReactNode, SyntheticEvent} from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import { createApiHeaders } from '@/lib/api-headers';
 import { cn } from '@/lib/utils';
 import type { DashboardStation } from '@/types/ntrip-dashboard';
 
@@ -500,17 +502,8 @@ export default function EditStation({ stationId }: StationEditPageProps) {
     ): Promise<unknown> {
         const response = await fetch(url, {
             method,
-
             credentials: 'same-origin',
-
-            headers: {
-                Accept: 'application/json',
-
-                'Content-Type': 'application/json',
-
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-
+            headers: createApiHeaders(true),
             body: JSON.stringify(body),
         });
 

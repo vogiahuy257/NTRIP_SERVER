@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
 import type { RoverAccount } from '@/features/rover-accounts/types';
 import { useRoverAccounts } from '@/features/rover-accounts/use-rover-accounts';
+import { createApiHeaders } from '@/lib/api-headers';
 import { cn } from '@/lib/utils';
 
 import { MountpointDirectoryPanel } from './components/mountpoint-directory-panel';
@@ -125,20 +126,9 @@ async function updateMountpointAccessMode(
 ): Promise<MountpointAccessMode> {
     const response = await fetch(`/api/v1/mountpoints/${mountpointId}`, {
         method: 'PUT',
-
         credentials: 'same-origin',
-
-        headers: {
-            Accept: 'application/json',
-
-            'Content-Type': 'application/json',
-
-            'X-Requested-With': 'XMLHttpRequest',
-        },
-
-        body: JSON.stringify({
-            access_mode: accessMode,
-        }),
+        headers: createApiHeaders(true),
+        body: JSON.stringify({ access_mode: accessMode }),
     });
 
     const payload = (await response.json().catch(() => null)) as unknown;

@@ -26,14 +26,16 @@ import {
     useEffect,
     useMemo,
     useRef,
-    useState,
-    type ReactNode,
-    type SyntheticEvent,
+    useState
+    
+    
 } from 'react';
+import type {ReactNode, SyntheticEvent} from 'react';
 
 import { StatusPill } from '@/components/map-dashboard/status-pill';
 import { Button } from '@/components/ui/button';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import { createApiHeaders } from '@/lib/api-headers';
 import { cn } from '@/lib/utils';
 import type { DashboardStation, StationHealth } from '@/types/ntrip-dashboard';
 
@@ -714,14 +716,8 @@ export default function StationShow({ stationId }: StationDetailPageProps) {
                 `/api/v1/stations/${encodeURIComponent(String(stationId))}`,
                 {
                     method: 'DELETE',
-
                     credentials: 'same-origin',
-
-                    headers: {
-                        Accept: 'application/json',
-
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
+                    headers: createApiHeaders(),
                 },
             );
 

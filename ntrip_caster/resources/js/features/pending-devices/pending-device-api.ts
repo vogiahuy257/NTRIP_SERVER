@@ -1,3 +1,5 @@
+import { createApiHeaders } from '@/lib/api-headers';
+
 import {
     extractPendingDevice,
     extractPendingDeviceList,
@@ -24,54 +26,6 @@ export const PENDING_DEVICE_ENDPOINTS = {
 
     reject: (deviceId: number): string => `${BASE_ENDPOINT}/${deviceId}/reject`,
 } as const;
-
-function findCookie(name: string): string | null {
-    if (typeof document === 'undefined') {
-        return null;
-    }
-
-    const prefix = `${name}=`;
-
-    const cookie = document.cookie
-        .split(';')
-        .map((item) => item.trim())
-        .find((item) => item.startsWith(prefix));
-
-    return cookie === undefined
-        ? null
-        : decodeURIComponent(cookie.slice(prefix.length));
-}
-
-function createHeaders(hasBody: boolean): Record<string, string> {
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    if (hasBody) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    if (typeof document === 'undefined') {
-        return headers;
-    }
-
-    const csrfToken = document
-        .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-        ?.getAttribute('content');
-
-    if (csrfToken) {
-        headers['X-CSRF-TOKEN'] = csrfToken;
-    }
-
-    const xsrfToken = findCookie('XSRF-TOKEN');
-
-    if (xsrfToken) {
-        headers['X-XSRF-TOKEN'] = xsrfToken;
-    }
-
-    return headers;
-}
 
 async function readJson(response: Response): Promise<unknown> {
     return response.json().catch(() => null);
@@ -136,7 +90,7 @@ export async function fetchPendingDevices(
     const payload = await requestJson(PENDING_DEVICE_ENDPOINTS.index, {
         method: 'GET',
         signal,
-        headers: createHeaders(false),
+        headers: createApiHeaders(),
     });
 
     return extractPendingDeviceList(payload);
@@ -149,7 +103,7 @@ export async function fetchPendingDevice(
     const payload = await requestJson(PENDING_DEVICE_ENDPOINTS.show(deviceId), {
         method: 'GET',
         signal,
-        headers: createHeaders(false),
+        headers: createApiHeaders(),
     });
 
     const device = extractPendingDevice(payload);
@@ -169,7 +123,7 @@ export async function approvePendingDevice(
         PENDING_DEVICE_ENDPOINTS.approve(deviceId),
         {
             method: 'POST',
-            headers: createHeaders(true),
+            headers: createApiHeaders(true),
 
             body: JSON.stringify({
                 device_id: input.deviceId,
@@ -206,7 +160,7 @@ export async function rejectPendingDevice(
         PENDING_DEVICE_ENDPOINTS.reject(deviceId),
         {
             method: 'POST',
-            headers: createHeaders(true),
+            headers: createApiHeaders(true),
 
             body: JSON.stringify(
                 normalizedReason

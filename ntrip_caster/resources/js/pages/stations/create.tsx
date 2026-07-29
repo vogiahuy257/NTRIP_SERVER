@@ -15,15 +15,17 @@ import {
 import {
     useEffect,
     useRef,
-    useState,
-    type FormEvent,
-    type ReactNode,
-    type SyntheticEvent,
+    useState
+    
+    
+    
 } from 'react';
+import type {FormEvent, ReactNode, SyntheticEvent} from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import { createApiHeaders } from '@/lib/api-headers';
 import { cn } from '@/lib/utils';
 
 type StationFormState = {
@@ -467,17 +469,8 @@ export default function CreateStation() {
         try {
             const response = await fetch('/api/v1/stations', {
                 method: 'POST',
-
                 credentials: 'same-origin',
-
-                headers: {
-                    Accept: 'application/json',
-
-                    'Content-Type': 'application/json',
-
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-
+                headers: createApiHeaders(true),
                 body: JSON.stringify(payload),
             });
 

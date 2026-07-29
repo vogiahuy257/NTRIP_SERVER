@@ -1,12 +1,6 @@
 import { useEcho } from '@laravel/echo-react';
-import {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from 'react';
-
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createApiHeaders } from '@/lib/api-headers';
 import {
     ALERT_ENDPOINTS,
     ALERT_REALTIME_CHANNEL,
@@ -16,10 +10,11 @@ import {
     extractBroadcastAlert,
 } from './alert-contract';
 import {
-    isActiveAlert,
-    type AlertBroadcastPayload,
-    type AlertItem,
+    isActiveAlert
+    
+    
 } from './types';
+import type {AlertBroadcastPayload, AlertItem} from './types';
 
 const RECENT_ALERT_LIMIT = 20;
 
@@ -29,8 +24,7 @@ const SEVERITY_ORDER: Record<AlertItem['severity'], number> = {
 };
 
 function timestampOf(alert: AlertItem): number {
-    const value =
-        alert.resolvedAt ?? alert.lastObservedAt ?? alert.openedAt;
+    const value = alert.resolvedAt ?? alert.lastObservedAt ?? alert.openedAt;
 
     if (value === null) {
         return 0;
@@ -61,10 +55,7 @@ function sortRecentAlerts(alerts: AlertItem[]): AlertItem[] {
 }
 
 function upsertAlert(alerts: AlertItem[], nextAlert: AlertItem): AlertItem[] {
-    return [
-        ...alerts.filter((alert) => alert.id !== nextAlert.id),
-        nextAlert,
-    ];
+    return [...alerts.filter((alert) => alert.id !== nextAlert.id), nextAlert];
 }
 
 function isAbortError(reason: unknown): boolean {
@@ -85,49 +76,6 @@ function extractErrorMessage(payload: unknown): string | null {
     }
 
     return null;
-}
-
-function findCookie(name: string): string | null {
-    if (typeof document === 'undefined') {
-        return null;
-    }
-
-    const prefix = `${name}=`;
-    const cookie = document.cookie
-        .split(';')
-        .map((item) => item.trim())
-        .find((item) => item.startsWith(prefix));
-
-    return cookie === undefined
-        ? null
-        : decodeURIComponent(cookie.slice(prefix.length));
-}
-
-function createWriteHeaders(): HeadersInit {
-    const headers: Record<string, string> = {
-        Accept: 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-    };
-
-    if (typeof document === 'undefined') {
-        return headers;
-    }
-
-    const csrfToken = document
-        .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
-        ?.getAttribute('content');
-
-    if (csrfToken) {
-        headers['X-CSRF-TOKEN'] = csrfToken;
-    }
-
-    const xsrfToken = findCookie('XSRF-TOKEN');
-
-    if (xsrfToken) {
-        headers['X-XSRF-TOKEN'] = xsrfToken;
-    }
-
-    return headers;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -178,57 +126,60 @@ export function useAlertNotifications() {
 
     const requestControllerRef = useRef<AbortController | null>(null);
 
-    const loadAlerts = useCallback(async (refreshing = false): Promise<void> => {
-        requestControllerRef.current?.abort();
+    const loadAlerts = useCallback(
+        async (refreshing = false): Promise<void> => {
+            requestControllerRef.current?.abort();
 
-        const controller = new AbortController();
-        requestControllerRef.current = controller;
+            const controller = new AbortController();
+            requestControllerRef.current = controller;
 
-        if (refreshing) {
-            setIsRefreshing(true);
-        } else {
-            setIsLoading(true);
-        }
-
-        setError(null);
-
-        try {
-            const [active, history] = await Promise.all([
-                fetchAlerts(ALERT_ENDPOINTS.active, controller.signal),
-                fetchAlerts(ALERT_ENDPOINTS.history, controller.signal),
-            ]);
-
-            if (requestControllerRef.current !== controller) {
-                return;
+            if (refreshing) {
+                setIsRefreshing(true);
+            } else {
+                setIsLoading(true);
             }
 
-            setActiveAlerts(sortActiveAlerts(active.filter(isActiveAlert)));
-            setRecentAlerts(
-                sortRecentAlerts(
-                    history.filter((alert) => alert.status === 'resolved'),
-                ).slice(0, RECENT_ALERT_LIMIT),
-            );
-        } catch (requestError) {
-            if (
-                isAbortError(requestError) ||
-                requestControllerRef.current !== controller
-            ) {
-                return;
-            }
+            setError(null);
 
-            setError(
-                requestError instanceof Error
-                    ? requestError.message
-                    : 'Unable to load alerts.',
-            );
-        } finally {
-            if (requestControllerRef.current === controller) {
-                requestControllerRef.current = null;
-                setIsLoading(false);
-                setIsRefreshing(false);
+            try {
+                const [active, history] = await Promise.all([
+                    fetchAlerts(ALERT_ENDPOINTS.active, controller.signal),
+                    fetchAlerts(ALERT_ENDPOINTS.history, controller.signal),
+                ]);
+
+                if (requestControllerRef.current !== controller) {
+                    return;
+                }
+
+                setActiveAlerts(sortActiveAlerts(active.filter(isActiveAlert)));
+                setRecentAlerts(
+                    sortRecentAlerts(
+                        history.filter((alert) => alert.status === 'resolved'),
+                    ).slice(0, RECENT_ALERT_LIMIT),
+                );
+            } catch (requestError) {
+                if (
+                    isAbortError(requestError) ||
+                    requestControllerRef.current !== controller
+                ) {
+                    return;
+                }
+
+                setError(
+                    requestError instanceof Error
+                        ? requestError.message
+                        : 'Unable to load alerts.',
+                );
+            } finally {
+                if (requestControllerRef.current === controller) {
+                    requestControllerRef.current = null;
+                    setIsLoading(false);
+                    setIsRefreshing(false);
+                }
             }
-        }
-    }, []);
+        },
+        [],
+    );
 
     useEffect(() => {
         void loadAlerts();
@@ -305,6 +256,7 @@ export function useAlertNotifications() {
             setAcknowledgingAlertIds((current) => {
                 const next = new Set(current);
                 next.add(alertId);
+
                 return next;
             });
 
@@ -314,7 +266,7 @@ export function useAlertNotifications() {
                     {
                         method: 'POST',
                         credentials: 'same-origin',
-                        headers: createWriteHeaders(),
+                        headers: createApiHeaders(),
                     },
                 );
 
@@ -350,6 +302,7 @@ export function useAlertNotifications() {
                 setAcknowledgingAlertIds((current) => {
                     const next = new Set(current);
                     next.delete(alertId);
+
                     return next;
                 });
             }
