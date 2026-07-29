@@ -364,9 +364,9 @@ export function MapTopNavigation() {
                                     {getInitials(user.name)}
                                 </span>
 
-                                <span className="hidden max-w-28 truncate text-xs font-semibold text-ntrip-ink/68 sm:block">
+                                {/* <span className="hidden max-w-28 truncate text-xs font-semibold text-ntrip-ink/68 sm:block">
                                     {user.name}
-                                </span>
+                                </span> */}
 
                                 <ChevronDown className="size-3.5 text-ntrip-ink/48 transition-transform data-[state=open]:rotate-180" />
                             </button>
@@ -376,7 +376,7 @@ export function MapTopNavigation() {
                             align="end"
                             sideOffset={8}
                             className={cn(
-                                'ntrip-glass-panel-strong',
+                                'ntrip-glass-panel',
                                 'z-[120] w-72 overflow-hidden rounded-2xl',
                                 'border-white/42 p-1.5 shadow-ntrip-panel',
                             )}
