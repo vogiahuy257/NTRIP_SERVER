@@ -32,10 +32,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 import { BottleneckDiagnosisCard } from './components/bottleneck-diagnosis-card';
-import { SystemStatusOverview } from './components/system-status-overview';
 import { ObservabilityHelpButton } from './components/observability-help-button';
 import { RoverRealtimeDetails } from './components/rover-realtime-details';
 import { RtcmFlowSecondaryCharts } from './components/rtcm-flow-secondary-charts';
+import { SystemStatusOverview } from './components/system-status-overview';
 import { useRtcmFlowObservability } from './hooks/use-rtcm-flow-observability';
 import { useSystemStatus } from './hooks/use-system-status';
 import type { ObservabilityHelpId } from './lib/observability-help';

@@ -3,10 +3,18 @@ import { ChevronDown, Menu, RadioTower, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserMenuContent } from '@/components/user-menu-content';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
 import { AlertNotificationDrawer } from '@/features/alerts/alert-notification-drawer';
 import { usePendingDevices } from '@/features/pending-devices/use-pending-devices';
+import { useInitials } from '@/hooks/use-initials';
 import { cn } from '@/lib/utils';
+import { edit as editProfile } from '@/routes/profile';
 
 const NAVIGATION = [
     {
@@ -145,7 +153,11 @@ type MobileMenuState = {
 };
 
 export function MapTopNavigation() {
-    const { url } = usePage();
+    const { url, props } = usePage();
+
+    const user = props.auth.user;
+
+    const getInitials = useInitials();
 
     const {
         isRefreshing,
@@ -157,12 +169,7 @@ export function MapTopNavigation() {
     const { pendingCount } = usePendingDevices();
 
     const currentUrl = url.split('?')[0];
-
-    /*
-     * Gắn trạng thái menu với URL hiện tại.
-     * Khi Inertia đổi trang, menu tự được xem là đóng,
-     * không cần gọi setState trong useEffect.
-     */
+    const settingsHref = `${editProfile().url}?return=${encodeURIComponent(currentUrl)}`;
     const [mobileMenuState, setMobileMenuState] = useState<MobileMenuState>(
         () => ({
             url: currentUrl,
@@ -339,17 +346,48 @@ export function MapTopNavigation() {
 
                 <AlertNotificationDrawer />
 
-                <button
-                    type="button"
-                    aria-label="Open user menu"
-                    className="flex h-10 items-center gap-2 rounded-xl bg-ntrip-cloud/72 px-2.5 font-sans shadow-ntrip-inset-strong"
-                >
-                    <span className="grid size-7 place-items-center rounded-xl bg-ntrip-amber/25 text-xs leading-none font-bold">
-                        GH
-                    </span>
+                {user ? (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label="Open user menu"
+                                className={cn(
+                                    'flex h-10 items-center gap-2 rounded-xl px-2.5 font-sans transition',
+                                    'bg-ntrip-cloud/72 shadow-ntrip-inset-strong',
+                                    'hover:bg-ntrip-cloud/92',
+                                    'focus-visible:ring-2 focus-visible:ring-ntrip-teal/35 focus-visible:outline-none',
+                                    'data-[state=open]:bg-ntrip-cloud/92',
+                                )}
+                            >
+                                <span className="grid size-7 place-items-center rounded-xl bg-ntrip-amber/25 text-xs leading-none font-bold">
+                                    {getInitials(user.name)}
+                                </span>
 
-                    <ChevronDown className="size-3.5 text-ntrip-ink/48" />
-                </button>
+                                <span className="hidden max-w-28 truncate text-xs font-semibold text-ntrip-ink/68 sm:block">
+                                    {user.name}
+                                </span>
+
+                                <ChevronDown className="size-3.5 text-ntrip-ink/48 transition-transform data-[state=open]:rotate-180" />
+                            </button>
+                        </DropdownMenuTrigger>
+
+                        <DropdownMenuContent
+                            align="end"
+                            sideOffset={8}
+                            className={cn(
+                                'ntrip-glass-panel-strong',
+                                'z-[120] w-72 overflow-hidden rounded-2xl',
+                                'border-white/42 p-1.5 shadow-ntrip-panel',
+                            )}
+                        >
+                            <UserMenuContent
+                                user={user}
+                                settingsHref={settingsHref}
+                            />
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                ) : null}
             </div>
 
             {mobileMenuOpen && (
@@ -362,7 +400,7 @@ export function MapTopNavigation() {
                         'top-[calc(100%+0.5rem)]',
                         'right-0',
                         'left-0',
-                        'z-50',
+                        'z-9999',
                         'rounded-2xl',
                         'p-2',
                         'lg:hidden',

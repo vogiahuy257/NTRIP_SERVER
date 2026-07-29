@@ -1,14 +1,7 @@
-import {
-    useCallback,
-    useEffect,
-    useRef,
-    useState,
-} from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import {
-    fetchSystemStatus,
-    type SystemStatus,
-} from '../lib/system-status';
+import { fetchSystemStatus } from '../lib/system-status';
+import type { SystemStatus } from '../lib/system-status';
 
 const REFRESH_INTERVAL_MS = 15_000;
 
@@ -23,39 +16,28 @@ type UseSystemStatusResult = {
 };
 
 export function useSystemStatus(): UseSystemStatusResult {
-    const [status, setStatus] =
-        useState<SystemStatus | null>(null);
+    const [status, setStatus] = useState<SystemStatus | null>(null);
 
-    const [error, setError] =
-        useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const [isRefreshing, setIsRefreshing] =
-        useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    const activeRequestRef =
-        useRef<AbortController | null>(null);
+    const activeRequestRef = useRef<AbortController | null>(null);
 
     const requestStatus = useCallback(
-        async (
-            showRefreshIndicator: boolean,
-        ): Promise<void> => {
+        async (showRefreshIndicator: boolean): Promise<void> => {
             activeRequestRef.current?.abort();
 
-            const controller =
-                new AbortController();
+            const controller = new AbortController();
 
-            activeRequestRef.current =
-                controller;
+            activeRequestRef.current = controller;
 
             if (showRefreshIndicator) {
                 setIsRefreshing(true);
             }
 
             try {
-                const nextStatus =
-                    await fetchSystemStatus(
-                        controller.signal,
-                    );
+                const nextStatus = await fetchSystemStatus(controller.signal);
 
                 if (controller.signal.aborted) {
                     return;
@@ -67,8 +49,7 @@ export function useSystemStatus(): UseSystemStatusResult {
                 if (
                     controller.signal.aborted ||
                     (reason instanceof DOMException &&
-                        reason.name ===
-                            'AbortError')
+                        reason.name === 'AbortError')
                 ) {
                     return;
                 }
@@ -79,12 +60,8 @@ export function useSystemStatus(): UseSystemStatusResult {
                         : 'Unable to load System Status.',
                 );
             } finally {
-                if (
-                    activeRequestRef.current ===
-                    controller
-                ) {
-                    activeRequestRef.current =
-                        null;
+                if (activeRequestRef.current === controller) {
+                    activeRequestRef.current = null;
 
                     if (showRefreshIndicator) {
                         setIsRefreshing(false);
@@ -95,26 +72,21 @@ export function useSystemStatus(): UseSystemStatusResult {
         [],
     );
 
-    const refresh = useCallback(
-        async (): Promise<void> => {
-            await requestStatus(true);
-        },
-        [requestStatus],
-    );
+    const refresh = useCallback(async (): Promise<void> => {
+        await requestStatus(true);
+    }, [requestStatus]);
 
     useEffect(() => {
-        /*
-         * Không đặt setState trực tiếp trong effect.
-         * State chỉ được cập nhật sau khi request hoàn tất.
-         */
-        void requestStatus(false);
+        const initialRequestId = window.setTimeout(() => {
+            void requestStatus(false);
+        }, 0);
 
-        const intervalId =
-            window.setInterval(() => {
-                void requestStatus(false);
-            }, REFRESH_INTERVAL_MS);
+        const intervalId = window.setInterval(() => {
+            void requestStatus(false);
+        }, REFRESH_INTERVAL_MS);
 
         return () => {
+            window.clearTimeout(initialRequestId);
             window.clearInterval(intervalId);
 
             activeRequestRef.current?.abort();
@@ -126,8 +98,7 @@ export function useSystemStatus(): UseSystemStatusResult {
         status,
         error,
 
-        isInitialLoading:
-            status === null && error === null,
+        isInitialLoading: status === null && error === null,
 
         isRefreshing,
 

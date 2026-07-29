@@ -14,11 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
+import { formatBytes, formatCount } from '../lib/rtcm-flow-view';
 import type { SystemStatus } from '../lib/system-status';
-import {
-    formatBytes,
-    formatCount,
-} from '../lib/rtcm-flow-view';
 
 type SystemStatusOverviewProps = {
     status: SystemStatus | null;
@@ -30,14 +27,13 @@ type SystemStatusOverviewProps = {
     onRefresh: () => void | Promise<void>;
 };
 
-const dateTimeFormatter =
-    new Intl.DateTimeFormat(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-    });
+const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+});
 
 export function SystemStatusOverview({
     status,
@@ -51,9 +47,7 @@ export function SystemStatusOverview({
             <header className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                        <h2 className="text-sm font-semibold">
-                            System Status
-                        </h2>
+                        <h2 className="text-sm font-semibold">System Status</h2>
 
                         <SystemHealthBadge
                             available={status !== null}
@@ -62,9 +56,8 @@ export function SystemStatusOverview({
                     </div>
 
                     <p className="mt-1 text-micro leading-relaxed text-ntrip-ink/56">
-                        Backend service, Caster listener,
-                        Station availability, sessions and
-                        cumulative traffic.
+                        Backend service, Caster listener, Station availability,
+                        sessions and cumulative traffic.
                     </p>
                 </div>
 
@@ -73,9 +66,7 @@ export function SystemStatusOverview({
                         <span className="hidden text-right text-micro text-ntrip-ink/46 sm:block">
                             Server time
                             <strong className="ml-1 font-semibold text-ntrip-ink/66">
-                                {dateTimeFormatter.format(
-                                    status.service.time,
-                                )}
+                                {dateTimeFormatter.format(status.service.time)}
                             </strong>
                         </span>
                     ) : null}
@@ -93,11 +84,9 @@ export function SystemStatusOverview({
                         <RefreshCw
                             className={cn(
                                 'size-3.5',
-                                refreshing &&
-                                    'animate-spin',
+                                refreshing && 'animate-spin',
                             )}
                         />
-
                         Status
                     </Button>
                 </div>
@@ -128,14 +117,9 @@ export function SystemStatusOverview({
                     icon={Server}
                     loading={loading}
                     tone="healthy"
-                    value={
-                        status === null
-                            ? '—'
-                            : 'Online'
-                    }
+                    value={status === null ? '—' : 'Online'}
                     description={
-                        status?.service.name ??
-                        'Waiting for service response'
+                        status?.service.name ?? 'Waiting for service response'
                     }
                 />
 
@@ -189,8 +173,7 @@ export function SystemStatusOverview({
                     tone={
                         status !== null &&
                         status.mountpoints.total > 0 &&
-                        status.mountpoints.enabled ===
-                            status.mountpoints.total
+                        status.mountpoints.enabled === status.mountpoints.total
                             ? 'healthy'
                             : 'warning'
                     }
@@ -207,9 +190,7 @@ export function SystemStatusOverview({
                     }
                     description="Active Sources · Active Rovers"
                     tone={
-                        status !== null &&
-                        status.connections.activeSources >
-                            0
+                        status !== null && status.connections.activeSources > 0
                             ? 'healthy'
                             : 'neutral'
                     }
@@ -222,10 +203,7 @@ export function SystemStatusOverview({
                     value={
                         status === null
                             ? '—'
-                            : formatBytes(
-                                  status.traffic
-                                      .sourceBytes,
-                              )
+                            : formatBytes(status.traffic.sourceBytes)
                     }
                     description={
                         status === null
@@ -240,39 +218,28 @@ export function SystemStatusOverview({
                     <span>
                         Stations total:{' '}
                         <strong className="font-semibold text-ntrip-ink/66">
-                            {formatCount(
-                                status.stations.total,
-                            )}
+                            {formatCount(status.stations.total)}
                         </strong>
                     </span>
 
                     <span>
                         Mountpoints total:{' '}
                         <strong className="font-semibold text-ntrip-ink/66">
-                            {formatCount(
-                                status.mountpoints
-                                    .total,
-                            )}
+                            {formatCount(status.mountpoints.total)}
                         </strong>
                     </span>
 
                     <span>
                         Source traffic:{' '}
                         <strong className="font-semibold text-ntrip-ink/66">
-                            {formatBytes(
-                                status.traffic
-                                    .sourceBytes,
-                            )}
+                            {formatBytes(status.traffic.sourceBytes)}
                         </strong>
                     </span>
 
                     <span>
                         Rover traffic:{' '}
                         <strong className="font-semibold text-ntrip-ink/66">
-                            {formatBytes(
-                                status.traffic
-                                    .roverBytes,
-                            )}
+                            {formatBytes(status.traffic.roverBytes)}
                         </strong>
                     </span>
                 </div>
@@ -288,10 +255,7 @@ type StatusCardProps = {
 
     icon: LucideIcon;
 
-    tone?:
-        | 'neutral'
-        | 'healthy'
-        | 'warning';
+    tone?: 'neutral' | 'healthy' | 'warning';
 
     loading?: boolean;
     mono?: boolean;
@@ -320,8 +284,7 @@ function StatusCard({
                         <p
                             className={cn(
                                 'mt-1 truncate text-base font-semibold tracking-[-0.025em] tabular-nums',
-                                mono &&
-                                    'font-mono text-caption',
+                                mono && 'font-mono text-caption',
                             )}
                             title={value}
                         >
@@ -333,18 +296,12 @@ function StatusCard({
                 <span
                     className={cn(
                         'grid size-9 shrink-0 place-items-center rounded-xl bg-ntrip-cloud/58 shadow-ntrip-inset',
-                        tone === 'healthy' &&
-                            'text-ntrip-teal',
-                        tone === 'warning' &&
-                            'text-ntrip-amber',
-                        tone === 'neutral' &&
-                            'text-ntrip-ink/58',
+                        tone === 'healthy' && 'text-ntrip-teal',
+                        tone === 'warning' && 'text-ntrip-amber',
+                        tone === 'neutral' && 'text-ntrip-ink/58',
                     )}
                 >
-                    <Icon
-                        className="size-3.5"
-                        strokeWidth={1.8}
-                    />
+                    <Icon className="size-3.5" strokeWidth={1.8} />
                 </span>
             </div>
 
@@ -383,15 +340,11 @@ function SystemHealthBadge({
             <span
                 className={cn(
                     'size-1.5 rounded-full',
-                    available
-                        ? 'bg-ntrip-teal'
-                        : 'bg-ntrip-coral',
+                    available ? 'bg-ntrip-teal' : 'bg-ntrip-coral',
                 )}
             />
 
-            {available
-                ? 'Backend online'
-                : 'Unavailable'}
+            {available ? 'Backend online' : 'Unavailable'}
         </span>
     );
 }
