@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'database'),
+    'default' => env('QUEUE_CONNECTION', 'failover'),
 
     /*
     |--------------------------------------------------------------------------
@@ -41,7 +41,7 @@ return [
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
-            'after_commit' => false,
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [
@@ -66,11 +66,11 @@ return [
 
         'redis' => [
             'driver' => 'redis',
-            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'queue'),
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
-            'block_for' => null,
-            'after_commit' => false,
+            'block_for' => (int) env('REDIS_QUEUE_BLOCK_FOR', 5),
+            'after_commit' => env('REDIS_QUEUE_AFTER_COMMIT', true),
         ],
 
         'deferred' => [
@@ -83,9 +83,14 @@ return [
 
         'failover' => [
             'driver' => 'failover',
+
+            /*
+            * Redis là queue chính.
+            * PostgreSQL nhận job khi Redis tạm thời không ghi được.
+            */
             'connections' => [
+                'redis',
                 'database',
-                'deferred',
             ],
         ],
 

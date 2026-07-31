@@ -1003,20 +1003,72 @@ install_redis_environment() {
 }
 
 configure_redis_env() {
-    [[ -f "$ENV_FILE" ]] || fail ".env is missing."
+    [[ -f "$ENV_FILE" ]] ||
+        fail ".env is missing."
 
+    # Redis client and network.
     set_env_value REDIS_CLIENT "phpredis"
     set_env_value REDIS_HOST "$REDIS_HOST"
     set_env_literal REDIS_PASSWORD "null"
     set_env_value REDIS_PORT "$REDIS_PORT"
 
+    # Logical databases.
     set_env_value REDIS_DB "0"
     set_env_value REDIS_CACHE_DB "1"
     set_env_value REDIS_QUEUE_DB "2"
     set_env_value REDIS_SESSION_DB "3"
+
+    # Key namespace.
     set_env_value REDIS_PREFIX "ntrip:"
 
-    ok "Redis connection settings were written to .env."
+    # Connection behavior.
+    set_env_value REDIS_PERSISTENT "false"
+    set_env_value REDIS_CONNECT_TIMEOUT "2"
+    set_env_value REDIS_READ_TIMEOUT "2"
+    set_env_value REDIS_QUEUE_READ_TIMEOUT "10"
+    set_env_value REDIS_RETRY_INTERVAL "100"
+    set_env_value REDIS_MAX_RETRIES "3"
+    set_env_value \
+        REDIS_BACKOFF_ALGORITHM \
+        "decorrelated_jitter"
+    set_env_value REDIS_BACKOFF_BASE "100"
+    set_env_value REDIS_BACKOFF_CAP "1000"
+
+    # Redis cache.
+    set_env_value CACHE_STORE "redis"
+    set_env_value CACHE_PREFIX "ntrip-cache-"
+
+    set_env_value \
+        REDIS_CACHE_CONNECTION \
+        "cache"
+
+    set_env_value \
+        REDIS_CACHE_LOCK_CONNECTION \
+        "default"
+
+    # Redis queue with PostgreSQL failover.
+    set_env_value QUEUE_CONNECTION "failover"
+
+    set_env_value \
+        REDIS_QUEUE_CONNECTION \
+        "queue"
+
+    set_env_value REDIS_QUEUE "default"
+    set_env_value REDIS_QUEUE_RETRY_AFTER "90"
+    set_env_value REDIS_QUEUE_BLOCK_FOR "5"
+    set_env_value REDIS_QUEUE_AFTER_COMMIT "true"
+
+    # Redis HTTP sessions.
+    set_env_value SESSION_DRIVER "redis"
+    set_env_value SESSION_CONNECTION "session"
+    set_env_value SESSION_LIFETIME "120"
+    set_env_value SESSION_ENCRYPT "false"
+
+    # One Reverb server does not need Redis scaling.
+    set_env_value REVERB_SCALING_ENABLED "false"
+
+    ok \
+        "Laravel cache, queue and session were configured for Redis."
 }
 
 install_system_environment() {
@@ -1136,15 +1188,18 @@ configure_deployment_env() {
     set_env_value DB_PASSWORD "$POSTGRES_PASSWORD"
 
     # Laravel runtime stores
-    set_env_value SESSION_DRIVER "database"
+    set_env_value SESSION_DRIVER "redis"
+    set_env_value SESSION_CONNECTION "session"
     set_env_value SESSION_LIFETIME "120"
     set_env_value SESSION_ENCRYPT "false"
     set_env_value SESSION_PATH "/"
-    set_env_value SESSION_DOMAIN "null"
+    set_env_literal SESSION_DOMAIN "null"
+
     set_env_value BROADCAST_CONNECTION "reverb"
     set_env_value FILESYSTEM_DISK "local"
-    set_env_value QUEUE_CONNECTION "database"
-    set_env_value CACHE_STORE "database"
+
+    set_env_value QUEUE_CONNECTION "failover"
+    set_env_value CACHE_STORE "redis"
 
     # Redis is installed and verified now. Runtime stores remain on
     # database until the Laravel Redis migration is applied separately.
@@ -1437,8 +1492,8 @@ write_systemd_service() {
     $SUDO tee "/etc/systemd/system/${service_name}.service" >/dev/null <<UNIT
 [Unit]
 Description=${description}
-After=network-online.target postgresql.service
-Wants=network-online.target
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target redis-server.service
 
 [Service]
 Type=simple
@@ -1491,12 +1546,39 @@ configure_systemd_services() {
     fi
 
     if artisan_has_command queue:work; then
+        # Remove the previous single database worker.
+        if systemctl list-unit-files \
+            "${SYSTEMD_PREFIX}-queue.service" \
+            >/dev/null 2>&1; then
+
+            $SUDO systemctl disable --now \
+                "${SYSTEMD_PREFIX}-queue.service" \
+                >/dev/null 2>&1 || true
+        fi
+
+        $SUDO rm -f \
+            "/etc/systemd/system/${SYSTEMD_PREFIX}-queue.service"
+
+        # Isolated worker for NTRIP session realtime events.
         write_systemd_service \
-            "${SYSTEMD_PREFIX}-queue" \
-            "NTRIP Caster Laravel Queue Worker" \
-            "queue:work database --sleep=1 --tries=3 --timeout=120 --max-time=3600"
+            "${SYSTEMD_PREFIX}-queue-realtime" \
+            "NTRIP Caster Redis Realtime Queue Worker" \
+            "queue:work redis --queue=realtime --sleep=1 --tries=3 --timeout=15 --max-time=3600 --memory=192"
+
+        # Alerts and regular background jobs.
+        write_systemd_service \
+            "${SYSTEMD_PREFIX}-queue-background" \
+            "NTRIP Caster Redis Background Queue Worker" \
+            "queue:work redis --queue=alerts,default --sleep=1 --tries=3 --timeout=60 --max-time=3600 --memory=256"
+
+        # PostgreSQL queue used only when Redis queue push fails.
+        write_systemd_service \
+            "${SYSTEMD_PREFIX}-queue-fallback" \
+            "NTRIP Caster PostgreSQL Fallback Queue Worker" \
+            "queue:work database --queue=realtime,alerts,default --sleep=2 --tries=3 --timeout=60 --max-time=3600 --memory=192"
     else
-        warn "Artisan command queue:work was not found; queue service was not created."
+        warn \
+            "Artisan command queue:work was not found; queue services were not created."
     fi
 
     if artisan_has_command schedule:work; then
@@ -1532,7 +1614,9 @@ configure_systemd_services() {
     local unit
     for unit in \
         "${SYSTEMD_PREFIX}-reverb" \
-        "${SYSTEMD_PREFIX}-queue" \
+        "${SYSTEMD_PREFIX}-queue-realtime" \
+        "${SYSTEMD_PREFIX}-queue-background" \
+        "${SYSTEMD_PREFIX}-queue-fallback" \
         "${SYSTEMD_PREFIX}-scheduler" \
         "${SYSTEMD_PREFIX}-server" \
         "${SYSTEMD_PREFIX}-observer"; do
@@ -1848,7 +1932,9 @@ check_deployment() {
     local optional_unit
     for optional_unit in \
         "${SYSTEMD_PREFIX}-reverb" \
-        "${SYSTEMD_PREFIX}-queue" \
+        "${SYSTEMD_PREFIX}-queue-realtime" \
+        "${SYSTEMD_PREFIX}-queue-background" \
+        "${SYSTEMD_PREFIX}-queue-fallback" \
         "${SYSTEMD_PREFIX}-scheduler" \
         "${SYSTEMD_PREFIX}-server" \
         "${SYSTEMD_PREFIX}-observer"; do
@@ -1996,13 +2082,14 @@ release_project() {
     php artisan route:cache || \
         warn "Route cache was skipped because non-cacheable routes exist."
 
-    log "Restarting application services"
+    log "Refreshing systemd services"
 
-    if [[ ! -x /usr/local/sbin/ntrip-restart-services ]]; then
-        fail "/usr/local/sbin/ntrip-restart-services was not found."
-    fi
+    configure_systemd_services
 
-    sudo -n /usr/local/sbin/ntrip-restart-services
+    log "Restarting PHP-FPM and reloading Nginx"
+
+    $SUDO systemctl restart "$PHP_FPM_SERVICE"
+    $SUDO systemctl reload nginx
 
     log "Checking deployment after release"
     check_deployment

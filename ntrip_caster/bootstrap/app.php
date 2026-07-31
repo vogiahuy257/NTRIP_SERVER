@@ -18,7 +18,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        $middleware->throttleWithRedis();
+
+        $middleware->encryptCookies(
+            except: [
+                'appearance',
+                'sidebar_state',
+            ],
+        );
 
         $middleware->web(append: [
             HandleAppearance::class,
@@ -28,6 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request): bool => $request->is('api/*')
+                || $request->expectsJson(),
         );
-    })->create();
+    })
+    ->create();
