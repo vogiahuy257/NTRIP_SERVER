@@ -869,21 +869,45 @@ check_redis_environment() {
         errors=$((errors + 1))
     fi
 
+    local listener_addresses=""
+
     listener_output="$(
-        $SUDO ss -ltnp 2>/dev/null |
-            grep -E ":${REDIS_PORT}([[:space:]]|$)" ||
+        $SUDO ss -H -ltnp 2>/dev/null |
+            awk -v port="$REDIS_PORT" '$4 ~ (":" port "$") { print }' ||
             true
+    )"
+
+    listener_addresses="$(
+        awk '{ print $4 }' <<<"$listener_output" |
+            sort -u
     )"
 
     if [[ -z "$listener_output" ]]; then
         warn "Redis is not listening on TCP ${REDIS_PORT}"
         errors=$((errors + 1))
-    elif grep -Eq '0\.0\.0\.0:|\[::\]:' <<<"$listener_output"; then
-        warn "Redis is exposed on a public wildcard interface."
-        printf '%s\n' "$listener_output"
-        errors=$((errors + 1))
     else
-        ok "Redis listens on localhost only."
+        local listener_address
+        local public_listener=false
+
+        while IFS= read -r listener_address; do
+            [[ -n "$listener_address" ]] || continue
+
+            case "$listener_address" in
+                "127.0.0.1:${REDIS_PORT}"|"[::1]:${REDIS_PORT}")
+                    ;;
+                *)
+                    public_listener=true
+                    ;;
+            esac
+        done <<<"$listener_addresses"
+
+        if is_true "$public_listener"; then
+            warn "Redis is listening on a non-loopback interface."
+            printf '%s\n' "$listener_output"
+            errors=$((errors + 1))
+        else
+            ok "Redis listens on localhost only: ${listener_addresses//$'\n'/, }"
+        fi
     fi
 
     if command_exists redis-cli; then
