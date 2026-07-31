@@ -6,14 +6,19 @@ import {
     TriangleAlert,
     Users,
 } from 'lucide-react';
-
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
+import { hasRoverMapPosition } from '@/realtime/dashboard-session-selectors';
+import type {
+    DashboardRoverSession,
+    DashboardStation,
+} from '@/types/ntrip-dashboard';
 
 import { DashboardMapControls } from './components/dashboard-map-controls';
 import { DashboardMetricsDock } from './components/dashboard-metrics-dock';
-import { DashboardStationList } from './components/dashboard-station-list';
+import { DashboardNetworkDirectory } from './components/dashboard-network-directory';
+import type { DashboardDirectoryTab } from './components/dashboard-network-directory';
 import type { DashboardMetric } from './components/dashboard-types';
 import { StationMapDetailCard } from './components/station-map-detail-card';
 import { formatBps, formatInteger } from './lib/dashboard-formatters';
@@ -21,20 +26,48 @@ import { formatBps, formatInteger } from './lib/dashboard-formatters';
 export default function Dashboard() {
     const {
         stations,
+        roverSessions,
+
         activeSources,
         activeRovers,
         activeSessions,
+
         totalTrafficBps,
         totalCrcErrors,
+
         mapRef,
+
         selectedStationId,
         selectedStation,
+
         hoveredStationId,
         activeStation,
         stationMapAnchor,
+
         setSelectedStationId,
         setHoveredStationId,
     } = useMapDashboard();
+
+    const [directoryTab, setDirectoryTab] =
+        useState<DashboardDirectoryTab>('stations');
+
+    const [selectedRoverId, setSelectedRoverId] = useState<
+        DashboardRoverSession['id'] | null
+    >(null);
+
+    const selectedRover = useMemo(
+        () =>
+            roverSessions.find(
+                (rover) => String(rover.id) === String(selectedRoverId),
+            ) ?? null,
+        [roverSessions, selectedRoverId],
+    );
+
+    /*
+     * Khi Rover disconnect, session biến mất khỏi roverSessions.
+     * Giá trị selection hiển thị tự động trở về null.
+     */
+    const resolvedSelectedRoverId = selectedRover?.id ?? null;
 
     const metrics = useMemo<DashboardMetric[]>(
         () => [
@@ -90,13 +123,55 @@ export default function Dashboard() {
         ],
     );
 
-    const selectStation = (stationId: (typeof stations)[number]['id']) => {
+    const selectStation = (station: DashboardStation): void => {
+        setDirectoryTab('stations');
+        setSelectedRoverId(null);
+
         setHoveredStationId(null);
-        setSelectedStationId(stationId);
+        setSelectedStationId(station.id);
 
         window.setTimeout(() => {
             mapRef.current?.focusSelected();
         }, 0);
+    };
+
+    const selectRover = (rover: DashboardRoverSession): void => {
+        setDirectoryTab('rovers');
+
+        setHoveredStationId(null);
+        setSelectedStationId(null);
+
+        setSelectedRoverId(rover.id);
+
+        /*
+         * Rover chưa có GGA hoặc chưa có tọa độ:
+         * chỉ chọn trong danh sách, không di chuyển map.
+         */
+        if (!hasRoverMapPosition(rover)) {
+            return;
+        }
+
+        window.setTimeout(() => {
+            mapRef.current?.focusCoordinates(
+                rover.roverLongitude,
+                rover.roverLatitude,
+            );
+        }, 0);
+    };
+
+    const focusSelectedItem = (): void => {
+        if (selectedStationId !== null) {
+            mapRef.current?.focusSelected();
+
+            return;
+        }
+
+        if (selectedRover && hasRoverMapPosition(selectedRover)) {
+            mapRef.current?.focusCoordinates(
+                selectedRover.roverLongitude,
+                selectedRover.roverLatitude,
+            );
+        }
     };
 
     return (
@@ -107,15 +182,20 @@ export default function Dashboard() {
                 <DashboardMapControls
                     onZoomIn={() => mapRef.current?.zoomIn()}
                     onZoomOut={() => mapRef.current?.zoomOut()}
-                    onFitStations={() => mapRef.current?.fitStations()}
-                    onFocusSelected={() => mapRef.current?.focusSelected()}
+                    onFitNetwork={() => mapRef.current?.fitNetwork()}
+                    onFocusSelected={focusSelectedItem}
                 />
 
-                <DashboardStationList
+                <DashboardNetworkDirectory
+                    activeTab={directoryTab}
                     stations={stations}
+                    rovers={roverSessions}
                     selectedStationId={selectedStationId}
-                    onSelectStation={(station) => selectStation(station.id)}
+                    selectedRoverId={resolvedSelectedRoverId}
+                    onTabChange={setDirectoryTab}
+                    onSelectStation={selectStation}
                     onHoverStation={setHoveredStationId}
+                    onSelectRover={selectRover}
                 />
 
                 <DashboardMetricsDock metrics={metrics} />
@@ -133,6 +213,7 @@ export default function Dashboard() {
                         }
                         onClose={() => {
                             setHoveredStationId(null);
+
                             setSelectedStationId(null);
                         }}
                         onHoverChange={(hovered) =>

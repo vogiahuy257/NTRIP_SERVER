@@ -48,6 +48,7 @@ class NtripCaster
      *     bytes_transferred: int,
      *     connected_at: int,
      *     last_stats_flush_at: int,
+     *     last_gga_persisted_at_ns: int,
      *     last_activity: int,
      *     parser: ?Rtcm3Parser
      * }>
@@ -70,6 +71,7 @@ class NtripCaster
     public function __construct(
         private readonly RoverConnectionService $roverConnections,
         private readonly NtripSessionService $sessions,
+        private readonly NmeaGgaParser $ggaParser,
         private readonly SourceDeviceDiscoveryService $sourceDeviceDiscovery,
         private readonly PendingDeviceProvisioningService $deviceProvisioning,
         private readonly RtcmFlowMetricsSink $flowMetrics,
@@ -284,6 +286,7 @@ class NtripCaster
             'connected_at' => time(),
             'last_activity' => time(),
             'last_stats_flush_at' => time(),
+            'last_gga_persisted_at_ns' => 0,
         ];
 
         $logger("Accepted connection from {$peerAddress}");
@@ -378,24 +381,205 @@ class NtripCaster
             if (
                 isset($this->clients[$clientId])
                 && $remainingData !== ''
-                && $this->clients[$clientId]['state']
-                    === 'source'
             ) {
-                $this->relaySourceData(
+                $this->handleClientPayload(
                     $clientId,
                     $remainingData,
-                    $logger
+                    $logger,
                 );
             }
 
             return;
         }
 
-        if ($client['state'] === 'source') {
+        $this->handleClientPayload(
+            $clientId,
+            $data,
+            $logger,
+        );
+    }
+
+    private function handleClientPayload(
+        int $clientId,
+        string $data,
+        callable $logger,
+    ): void {
+        if (! isset($this->clients[$clientId])) {
+            return;
+        }
+
+        $state = $this->clients[$clientId]['state'];
+
+        if ($state === 'source') {
             $this->relaySourceData(
                 $clientId,
                 $data,
-                $logger
+                $logger,
+            );
+
+            return;
+        }
+
+        if ($state === 'rover') {
+            $this->handleRoverInput(
+                $clientId,
+                $data,
+                $logger,
+            );
+        }
+    }
+
+    private function handleRoverInput(
+        int $clientId,
+        string $data,
+        callable $logger,
+    ): void {
+        if (
+            ! isset($this->clients[$clientId])
+            || $this->clients[$clientId]['state'] !== 'rover'
+        ) {
+            return;
+        }
+
+        $client = &$this->clients[$clientId];
+
+        /*
+         * input_buffer đã được reset sau handshake nên có thể
+         * tái sử dụng làm buffer GGA riêng của từng Rover socket.
+         */
+        $client['input_buffer'] .= $data;
+
+        $maxBufferBytes = max(
+            1024,
+            (int) config(
+                'ntrip.max_rover_input_bytes',
+                8192,
+            ),
+        );
+
+        /*
+         * TCP là byte stream:
+         * - một GGA có thể bị chia thành nhiều packet;
+         * - một packet có thể chứa nhiều GGA.
+         */
+        while (
+            ($lineEnd = strpos(
+                $client['input_buffer'],
+                "\n",
+            )) !== false
+        ) {
+            $line = trim(
+                substr(
+                    $client['input_buffer'],
+                    0,
+                    $lineEnd + 1,
+                ),
+            );
+
+            $client['input_buffer'] = substr(
+                $client['input_buffer'],
+                $lineEnd + 1,
+            );
+
+            if ($line !== '') {
+                $this->handleRoverGgaLine(
+                    $clientId,
+                    $line,
+                    $logger,
+                );
+            }
+        }
+
+        if (
+            strlen($client['input_buffer'])
+            <= $maxBufferBytes
+        ) {
+            return;
+        }
+
+        /*
+         * Giữ lại phần bắt đầu từ ký tự $ cuối cùng vì đó có
+         * thể là đầu của một câu NMEA chưa nhận đủ.
+         */
+        $lastSentenceStart = strrpos(
+            $client['input_buffer'],
+            '$',
+        );
+
+        $client['input_buffer'] =
+            $lastSentenceStart === false
+                ? ''
+                : substr(
+                    $client['input_buffer'],
+                    $lastSentenceStart,
+                );
+
+        if (
+            strlen($client['input_buffer'])
+            > $maxBufferBytes
+        ) {
+            $client['input_buffer'] = '';
+        }
+    }
+
+    private function handleRoverGgaLine(
+        int $clientId,
+        string $line,
+        callable $logger,
+    ): void {
+        if (! isset($this->clients[$clientId])) {
+            return;
+        }
+
+        $position = $this->ggaParser->parse($line);
+
+        $sessionId =
+            $this->clients[$clientId]['session_id'];
+
+        if (
+            $position === null
+            || $sessionId === null
+        ) {
+            return;
+        }
+
+        try {
+            $updated =
+                $this->sessions->updateRoverPosition(
+                    sessionId: $sessionId,
+                    position: $position,
+                );
+
+            /*
+             * Mặc định không log mỗi GGA vì khi có nhiều Rover
+             * sẽ tạo lượng log rất lớn.
+             */
+            if (
+                $updated
+                && (bool) config(
+                    'ntrip.log_rover_gga',
+                    false,
+                )
+            ) {
+                $logger(
+                    sprintf(
+                        'Rover GGA updated for session %d',
+                        $sessionId,
+                    ),
+                );
+            }
+        } catch (Throwable $exception) {
+            /*
+             * Một câu GGA hoặc lỗi database không được phép làm
+             * dừng toàn bộ tiến trình NTRIP Caster.
+             */
+            report($exception);
+
+            $logger(
+                sprintf(
+                    'Rover GGA update failed for session %d',
+                    $sessionId,
+                ),
             );
         }
     }
@@ -879,6 +1063,18 @@ class NtripCaster
             ."Connection: close\r\n\r\n",
             $logger
         );
+
+        $headerGga = trim(
+            $headers['ntrip-gga'] ?? '',
+        );
+
+        if ($headerGga !== '') {
+            $this->handleRoverGgaLine(
+                $clientId,
+                $headerGga,
+                $logger,
+            );
+        }
 
         $identity = $account->username ?? 'anonymous';
 

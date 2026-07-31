@@ -1,11 +1,23 @@
 import type {
+    DashboardRoverFixType,
     DashboardSession,
     DashboardSessionMountpoint,
+    DashboardSessionRoverAccount,
     DashboardSessionStation,
     NtripSessionConnectionType,
 } from '@/types/ntrip-dashboard';
 
 type UnknownRecord = Record<string, unknown>;
+
+const ROVER_FIX_TYPES = new Set<DashboardRoverFixType>([
+    'no_fix',
+    'gps_fix',
+    'dgps',
+    'rtk_fixed',
+    'rtk_float',
+    'estimated',
+    'unknown',
+]);
 
 function isRecord(value: unknown): value is UnknownRecord {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -41,6 +53,36 @@ function asNumber(value: unknown, fallback = 0): number {
     return fallback;
 }
 
+function asNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') {
+        return null;
+    }
+
+    const parsed = asNumber(value, Number.NaN);
+
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asNullableInteger(value: unknown): number | null {
+    const parsed = asNullableNumber(value);
+
+    return parsed === null ? null : Math.max(0, Math.trunc(parsed));
+}
+
+function asCoordinate(
+    value: unknown,
+    minimum: number,
+    maximum: number,
+): number | null {
+    const parsed = asNullableNumber(value);
+
+    if (parsed === null || parsed < minimum || parsed > maximum) {
+        return null;
+    }
+
+    return parsed;
+}
+
 function asIdentifier(value: unknown): number | string | null {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value;
@@ -67,6 +109,18 @@ function normaliseConnectionType(
     }
 
     return null;
+}
+
+function normaliseRoverFixType(value: unknown): DashboardRoverFixType | null {
+    const type = asNullableString(value)?.toLowerCase();
+
+    if (!type) {
+        return null;
+    }
+
+    return ROVER_FIX_TYPES.has(type as DashboardRoverFixType)
+        ? (type as DashboardRoverFixType)
+        : 'unknown';
 }
 
 function normaliseMessageCounts(value: unknown): Record<string, number> {
@@ -122,6 +176,26 @@ function normaliseMountpoint(
     };
 }
 
+function normaliseRoverAccount(
+    value: unknown,
+): DashboardSessionRoverAccount | null {
+    const account = asRecord(value);
+
+    const id = asIdentifier(account.id);
+
+    if (id === null) {
+        return null;
+    }
+
+    return {
+        id,
+
+        username: asString(account.username, `rover-${String(id)}`),
+
+        displayName: asNullableString(account.display_name),
+    };
+}
+
 export function normaliseDashboardSession(
     value: unknown,
 ): DashboardSession | null {
@@ -171,6 +245,34 @@ export function normaliseDashboardSession(
         rtcmCrcErrors: asNumber(session.rtcm_crc_errors, 0),
 
         rtcmMessageCounts: normaliseMessageCounts(session.rtcm_message_counts),
+
+        roverLatitude: asCoordinate(session.rover_latitude, -90, 90),
+
+        roverLongitude: asCoordinate(session.rover_longitude, -180, 180),
+
+        roverAltitudeM: asNullableNumber(session.rover_altitude_m),
+
+        roverGeoidSeparationM: asNullableNumber(
+            session.rover_geoid_separation_m,
+        ),
+
+        roverFixQuality: asNullableInteger(session.rover_fix_quality),
+
+        roverFixType: normaliseRoverFixType(session.rover_fix_type),
+
+        roverSatellites: asNullableInteger(session.rover_satellites),
+
+        roverHdop: asNullableNumber(session.rover_hdop),
+
+        roverGgaUtc: asNullableString(session.rover_gga_utc),
+
+        roverGgaReceivedAt: asNullableString(session.rover_gga_received_at),
+
+        roverPositionReceivedAt: asNullableString(
+            session.rover_position_received_at,
+        ),
+
+        roverAccount: normaliseRoverAccount(session.rover_account),
 
         mountpoint: normaliseMountpoint(session.mountpoint),
     };

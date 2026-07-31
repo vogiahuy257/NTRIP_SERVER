@@ -40,6 +40,15 @@ export type DashboardStation = {
 
 export type NtripSessionConnectionType = 'source' | 'rover';
 
+export type DashboardRoverFixType =
+    | 'no_fix'
+    | 'gps_fix'
+    | 'dgps'
+    | 'rtk_fixed'
+    | 'rtk_float'
+    | 'estimated'
+    | 'unknown';
+
 export type DashboardSessionStation = {
     id: number | string;
     deviceId: string;
@@ -52,6 +61,12 @@ export type DashboardSessionMountpoint = {
     name: string;
 
     station: DashboardSessionStation | null;
+};
+
+export type DashboardSessionRoverAccount = {
+    id: number | string;
+    username: string;
+    displayName: string | null;
 };
 
 export type DashboardSession = {
@@ -72,7 +87,7 @@ export type DashboardSession = {
     disconnectedAt: string | null;
 
     /*
-     * Thời điểm backend cập nhật bộ đếm session gần nhất.
+     * Thời điểm backend cập nhật session gần nhất.
      * RTCM Live dùng field này để tính tốc độ giữa hai mẫu.
      */
     lastStatsAt: string | null;
@@ -85,7 +100,26 @@ export type DashboardSession = {
 
     rtcmMessageCounts: Record<string, number>;
 
+    roverLatitude: number | null;
+    roverLongitude: number | null;
+    roverAltitudeM: number | null;
+    roverGeoidSeparationM: number | null;
+
+    roverFixQuality: number | null;
+    roverFixType: DashboardRoverFixType | null;
+    roverSatellites: number | null;
+    roverHdop: number | null;
+
+    roverGgaUtc: string | null;
+    roverGgaReceivedAt: string | null;
+    roverPositionReceivedAt: string | null;
+
+    roverAccount: DashboardSessionRoverAccount | null;
     mountpoint: DashboardSessionMountpoint | null;
+};
+
+export type DashboardRoverSession = DashboardSession & {
+    connectionType: 'rover';
 };
 
 export type DashboardSnapshot = {

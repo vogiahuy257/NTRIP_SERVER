@@ -1,9 +1,8 @@
 import { useConnectionStatus, useEcho } from '@laravel/echo-react';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import { selectDashboardRovers } from '@/realtime/dashboard-session-selectors';
 import { normaliseDashboardSnapshot } from '@/realtime/dashboard-snapshot-normalizer';
-
 import {
     NTRIP_DASHBOARD_CHANNEL,
     NTRIP_DASHBOARD_EVENTS,
@@ -245,7 +244,7 @@ export function useDashboardData() {
         handleDashboardRealtimeEvent,
     );
 
-    const { isRealtimeResyncing, lastRealtimeResyncedAt } = useRealtimeResync({
+    const { isRealtimeResyncing } = useRealtimeResync({
         connectionState: realtimeConnectionState,
 
         refresh,
@@ -280,10 +279,16 @@ export function useDashboardData() {
         [snapshot.stations],
     );
 
+    const roverSessions = useMemo(
+        () => selectDashboardRovers(snapshot.activeSessionItems),
+        [snapshot.activeSessionItems],
+    );
+
     return {
         ...snapshot,
 
         stations: orderedStations,
+        roverSessions,
 
         isRefreshing,
         error,

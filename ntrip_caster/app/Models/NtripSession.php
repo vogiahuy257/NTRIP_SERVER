@@ -31,6 +31,18 @@ class NtripSession extends Model
         'valid_rtcm_frames',
         'rtcm_crc_errors',
         'rtcm_message_counts',
+
+        'rover_latitude',
+        'rover_longitude',
+        'rover_altitude_m',
+        'rover_geoid_separation_m',
+        'rover_fix_quality',
+        'rover_fix_type',
+        'rover_satellites',
+        'rover_hdop',
+        'rover_gga_utc',
+        'rover_gga_received_at',
+        'rover_position_received_at',
     ];
 
     protected function casts(): array
@@ -38,57 +50,73 @@ class NtripSession extends Model
         return [
             'connected_at' => 'datetime',
             'disconnected_at' => 'datetime',
+
             'bytes_transferred' => 'integer',
+
             'valid_rtcm_frames' => 'integer',
             'rtcm_crc_errors' => 'integer',
             'rtcm_message_counts' => 'array',
+
+            'rover_latitude' => 'float',
+            'rover_longitude' => 'float',
+            'rover_altitude_m' => 'float',
+
+            'rover_geoid_separation_m' => 'float',
+
+            'rover_fix_quality' => 'integer',
+            'rover_satellites' => 'integer',
+            'rover_hdop' => 'float',
+
+            'rover_gga_received_at' => 'datetime',
+
+            'rover_position_received_at' => 'datetime',
         ];
     }
 
     public function mountpoint(): BelongsTo
     {
         return $this->belongsTo(
-            Mountpoint::class
+            Mountpoint::class,
         );
     }
 
     public function station(): BelongsTo
     {
         return $this->belongsTo(
-            Station::class
+            Station::class,
         );
     }
 
     public function roverAccount(): BelongsTo
     {
         return $this->belongsTo(
-            RoverAccount::class
+            RoverAccount::class,
         );
     }
 
     public function scopeActive(
-        Builder $query
+        Builder $query,
     ): Builder {
         return $query->whereNull(
-            'disconnected_at'
+            'disconnected_at',
         );
     }
 
     public function scopeRovers(
-        Builder $query
+        Builder $query,
     ): Builder {
         return $query->where(
             'connection_type',
-            self::TYPE_ROVER
+            self::TYPE_ROVER,
         );
     }
 
     public function scopeSources(
-        Builder $query
+        Builder $query,
     ): Builder {
         return $query->where(
             'connection_type',
-            self::TYPE_SOURCE
+            self::TYPE_SOURCE,
         );
     }
 }

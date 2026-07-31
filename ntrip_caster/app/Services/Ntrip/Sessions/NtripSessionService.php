@@ -13,6 +13,10 @@ use Throwable;
 
 final class NtripSessionService
 {
+    public function __construct(
+        private readonly NtripSessionPayloadFactory $payloads,
+    ) {}
+
     public function createSource(
         int $mountpointId,
         int $stationId,
@@ -43,8 +47,11 @@ final class NtripSessionService
 
         $this->broadcastAfterCommit(
             new NtripSessionStarted(
-                session: $this->fullPayload($session),
-                occurredAt: $session->connected_at->toIso8601String(),
+                session: $this->payloads->make($session),
+
+                occurredAt: $session
+                    ->connected_at
+                    ->toIso8601String(),
             ),
         );
 
@@ -62,8 +69,11 @@ final class NtripSessionService
             'mountpoint_id' => $mountpoint->id,
             'station_id' => null,
             'rover_account_id' => $account?->id,
+
             'connection_type' => NtripSession::TYPE_ROVER,
+
             'authenticated_username' => $account?->username,
+
             'client_agent' => $clientAgent,
             'ntrip_version' => $ntripVersion,
             'remote_ip' => $remoteIp,
@@ -75,14 +85,18 @@ final class NtripSessionService
         ]);
 
         $session->load([
+            'roverAccount:id,username,display_name',
             'mountpoint:id,station_id,name',
             'mountpoint.station:id,device_id,name',
         ]);
 
         $this->broadcastAfterCommit(
             new NtripSessionStarted(
-                session: $this->fullPayload($session),
-                occurredAt: $session->connected_at->toIso8601String(),
+                session: $this->payloads->make($session),
+
+                occurredAt: $session
+                    ->connected_at
+                    ->toIso8601String(),
             ),
         );
 
@@ -90,11 +104,6 @@ final class NtripSessionService
     }
 
     /**
-     * Cập nhật thống kê định kỳ của session đang hoạt động.
-     *
-     * Source có thêm thống kê RTCM.
-     * Rover chỉ cần bytes_transferred.
-     *
      * @param  array<array-key, int>|null  $rtcmMessageCounts
      */
     public function updateStats(
@@ -105,24 +114,17 @@ final class NtripSessionService
         ?array $rtcmMessageCounts = null,
     ): bool {
         $updateData = [
-            'bytes_transferred' => max(
-                0,
-                $bytesTransferred,
-            ),
+            'bytes_transferred' => max(0, $bytesTransferred),
         ];
 
         if ($validRtcmFrames !== null) {
-            $updateData['valid_rtcm_frames'] = max(
-                0,
-                $validRtcmFrames,
-            );
+            $updateData['valid_rtcm_frames'] =
+                max(0, $validRtcmFrames);
         }
 
         if ($rtcmCrcErrors !== null) {
-            $updateData['rtcm_crc_errors'] = max(
-                0,
-                $rtcmCrcErrors,
-            );
+            $updateData['rtcm_crc_errors'] =
+                max(0, $rtcmCrcErrors);
         }
 
         if ($rtcmMessageCounts !== null) {
@@ -145,32 +147,23 @@ final class NtripSessionService
 
         $payload = [
             'id' => $sessionId,
+
             'bytes_transferred' => $updateData['bytes_transferred'],
+
             'updated_at' => $occurredAt,
         ];
 
-        if (array_key_exists(
-            'valid_rtcm_frames',
-            $updateData,
-        )) {
-            $payload['valid_rtcm_frames'] =
-                $updateData['valid_rtcm_frames'];
-        }
-
-        if (array_key_exists(
-            'rtcm_crc_errors',
-            $updateData,
-        )) {
-            $payload['rtcm_crc_errors'] =
-                $updateData['rtcm_crc_errors'];
-        }
-
-        if (array_key_exists(
-            'rtcm_message_counts',
-            $updateData,
-        )) {
-            $payload['rtcm_message_counts'] =
-                $updateData['rtcm_message_counts'];
+        foreach (
+            [
+                'valid_rtcm_frames',
+                'rtcm_crc_errors',
+                'rtcm_message_counts',
+            ] as $field
+        ) {
+            if (array_key_exists($field, $updateData)) {
+                $payload[$field] =
+                    $updateData[$field];
+            }
         }
 
         $this->broadcastAfterCommit(
@@ -184,8 +177,108 @@ final class NtripSessionService
     }
 
     /**
-     * Kết thúc một session đang hoạt động.
-     *
+     * @param array{
+     *     utc_time: string,
+     *     latitude: ?float,
+     *     longitude: ?float,
+     *     altitude_m: ?float,
+     *     geoid_separation_m: ?float,
+     *     fix_quality: int,
+     *     fix_type: string,
+     *     satellites: int,
+     *     hdop: float
+     * } $position
+     */
+    public function updateRoverPosition(
+        int $sessionId,
+        array $position,
+    ): bool {
+        $receivedAt = now();
+
+        $updateData = [
+            'rover_fix_quality' => $position['fix_quality'],
+
+            'rover_fix_type' => $position['fix_type'],
+
+            'rover_satellites' => $position['satellites'],
+
+            'rover_hdop' => $position['hdop'],
+
+            'rover_gga_utc' => $position['utc_time'],
+
+            'rover_gga_received_at' => $receivedAt,
+        ];
+
+        $payload = [
+            'id' => $sessionId,
+
+            'rover_fix_quality' => $position['fix_quality'],
+
+            'rover_fix_type' => $position['fix_type'],
+
+            'rover_satellites' => $position['satellites'],
+
+            'rover_hdop' => $position['hdop'],
+
+            'rover_gga_utc' => $position['utc_time'],
+
+            'rover_gga_received_at' => $receivedAt->toIso8601String(),
+
+            'updated_at' => $receivedAt->toIso8601String(),
+        ];
+
+        if (
+            $position['latitude'] !== null
+            && $position['longitude'] !== null
+        ) {
+            $updateData += [
+                'rover_latitude' => $position['latitude'],
+
+                'rover_longitude' => $position['longitude'],
+
+                'rover_altitude_m' => $position['altitude_m'],
+
+                'rover_geoid_separation_m' => $position['geoid_separation_m'],
+
+                'rover_position_received_at' => $receivedAt,
+            ];
+
+            $payload += [
+                'rover_latitude' => $position['latitude'],
+
+                'rover_longitude' => $position['longitude'],
+
+                'rover_altitude_m' => $position['altitude_m'],
+
+                'rover_geoid_separation_m' => $position['geoid_separation_m'],
+
+                'rover_position_received_at' => $receivedAt->toIso8601String(),
+            ];
+        }
+
+        $updated = NtripSession::query()
+            ->active()
+            ->rovers()
+            ->whereKey($sessionId)
+            ->update($updateData);
+
+        if ($updated === 0) {
+            return false;
+        }
+
+        $this->broadcastAfterCommit(
+            new NtripSessionUpdated(
+                session: $payload,
+
+                occurredAt: $receivedAt
+                    ->toIso8601String(),
+            ),
+        );
+
+        return true;
+    }
+
+    /**
      * @param  array<array-key, int>|null  $rtcmMessageCounts
      */
     public function end(
@@ -199,6 +292,7 @@ final class NtripSessionService
         $session = NtripSession::query()
             ->active()
             ->with([
+                'roverAccount:id,username,display_name',
                 'mountpoint:id,station_id,name',
                 'mountpoint.station:id,device_id,name',
             ])
@@ -210,26 +304,23 @@ final class NtripSessionService
 
         $disconnectedAt = now();
 
-        $session->disconnected_at = $disconnectedAt;
-        $session->bytes_transferred = max(
-            0,
-            $bytesTransferred,
-        );
+        $session->disconnected_at =
+            $disconnectedAt;
+
+        $session->bytes_transferred =
+            max(0, $bytesTransferred);
+
         $session->disconnect_reason =
             $disconnectReason;
 
         if ($validRtcmFrames !== null) {
-            $session->valid_rtcm_frames = max(
-                0,
-                $validRtcmFrames,
-            );
+            $session->valid_rtcm_frames =
+                max(0, $validRtcmFrames);
         }
 
         if ($rtcmCrcErrors !== null) {
-            $session->rtcm_crc_errors = max(
-                0,
-                $rtcmCrcErrors,
-            );
+            $session->rtcm_crc_errors =
+                max(0, $rtcmCrcErrors);
         }
 
         if ($rtcmMessageCounts !== null) {
@@ -243,23 +334,23 @@ final class NtripSessionService
 
         $this->broadcastAfterCommit(
             new NtripSessionEnded(
-                session: $this->fullPayload($session),
-                occurredAt: $disconnectedAt->toIso8601String(),
+                session: $this->payloads->make($session),
+
+                occurredAt: $disconnectedAt
+                    ->toIso8601String(),
             ),
         );
 
         return true;
     }
 
-    /**
-     * Đóng các session còn sót lại khi Caster khởi động lại.
-     */
     public function endAllActive(
         string $disconnectReason,
     ): int {
         $sessions = NtripSession::query()
             ->active()
             ->with([
+                'roverAccount:id,username,display_name',
                 'mountpoint:id,station_id,name',
                 'mountpoint.station:id,device_id,name',
             ])
@@ -270,11 +361,11 @@ final class NtripSessionService
         foreach ($sessions as $session) {
             if (
                 $this->endLoadedSession(
-                    session: $session,
-                    disconnectReason: $disconnectReason,
+                    $session,
+                    $disconnectReason,
                 )
             ) {
-                $endedCount += 1;
+                $endedCount++;
             }
         }
 
@@ -291,7 +382,9 @@ final class NtripSessionService
 
         $disconnectedAt = now();
 
-        $session->disconnected_at = $disconnectedAt;
+        $session->disconnected_at =
+            $disconnectedAt;
+
         $session->disconnect_reason =
             $disconnectReason;
 
@@ -299,73 +392,14 @@ final class NtripSessionService
 
         $this->broadcastAfterCommit(
             new NtripSessionEnded(
-                session: $this->fullPayload($session),
-                occurredAt: $disconnectedAt->toIso8601String(),
+                session: $this->payloads->make($session),
+
+                occurredAt: $disconnectedAt
+                    ->toIso8601String(),
             ),
         );
 
         return true;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function fullPayload(
-        NtripSession $session,
-    ): array {
-        $mountpoint = $session->mountpoint;
-        $station = $mountpoint?->station;
-
-        return [
-            'id' => $session->id,
-            'mountpoint_id' => $session->mountpoint_id,
-            'station_id' => $session->station_id,
-            'rover_account_id' => $session->rover_account_id,
-
-            'connection_type' => $session->connection_type,
-
-            'authenticated_username' => $session->authenticated_username,
-
-            'client_agent' => $session->client_agent,
-
-            'ntrip_version' => $session->ntrip_version,
-
-            'remote_ip' => $session->remote_ip,
-
-            'connected_at' => $session
-                ->connected_at
-                ?->toIso8601String(),
-
-            'disconnected_at' => $session
-                ->disconnected_at
-                ?->toIso8601String(),
-
-            'bytes_transferred' => (int) $session->bytes_transferred,
-
-            'disconnect_reason' => $session->disconnect_reason,
-
-            'valid_rtcm_frames' => (int) $session->valid_rtcm_frames,
-
-            'rtcm_crc_errors' => (int) $session->rtcm_crc_errors,
-
-            'rtcm_message_counts' => $session->rtcm_message_counts ?? [],
-
-            'mountpoint' => $mountpoint === null
-                ? null
-                : [
-                    'id' => $mountpoint->id,
-                    'station_id' => $mountpoint->station_id,
-                    'name' => $mountpoint->name,
-
-                    'station' => $station === null
-                        ? null
-                        : [
-                            'id' => $station->id,
-                            'device_id' => $station->device_id,
-                            'name' => $station->name,
-                        ],
-                ],
-        ];
     }
 
     /**
@@ -378,24 +412,19 @@ final class NtripSessionService
         $normalised = [];
 
         foreach ($counts as $type => $count) {
-            $value = max(
-                0,
-                (int) $count,
-            );
+            $value = max(0, (int) $count);
 
-            if ($value === 0) {
-                continue;
+            if ($value > 0) {
+                $normalised[(string) $type] =
+                    $value;
             }
-
-            $normalised[(string) $type] =
-                $value;
         }
 
         return $normalised;
     }
 
     /**
-     * Không để lỗi Reverb làm dừng NTRIP Caster.
+     * Không để lỗi queue hoặc Reverb làm dừng Caster.
      */
     private function broadcastAfterCommit(
         object $event,

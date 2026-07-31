@@ -5,10 +5,15 @@ namespace App\Services\Dashboard;
 use App\Models\Mountpoint;
 use App\Models\NtripSession;
 use App\Models\Station;
+use App\Services\Ntrip\Sessions\NtripSessionPayloadFactory;
 use Illuminate\Support\Collection;
 
 final class DashboardSnapshotService
 {
+    public function __construct(
+        private readonly NtripSessionPayloadFactory $sessionPayloads,
+    ) {}
+
     /**
      * Tạo snapshot đầy đủ cho NTRIP Dashboard.
      *
@@ -75,8 +80,20 @@ final class DashboardSnapshotService
                 'valid_rtcm_frames',
                 'rtcm_crc_errors',
                 'rtcm_message_counts',
+                'rover_latitude',
+                'rover_longitude',
+                'rover_altitude_m',
+                'rover_geoid_separation_m',
+                'rover_fix_quality',
+                'rover_fix_type',
+                'rover_satellites',
+                'rover_hdop',
+                'rover_gga_utc',
+                'rover_gga_received_at',
+                'rover_position_received_at',
             ])
             ->with([
+                'roverAccount:id,username,display_name',
                 'mountpoint:id,station_id,name',
                 'mountpoint.station:id,device_id,name',
             ])
@@ -109,6 +126,21 @@ final class DashboardSnapshotService
             : $stations
                 ->where('source_connected', true)
                 ->count();
+
+        $activeSessionPayloads = $activeSessions
+            ->map(
+                fn (NtripSession $session): array => $this
+                    ->sessionPayloads
+                    ->make($session),
+            )
+            ->values();
+
+        $activeRoverPayloads = $activeSessionPayloads
+            ->where(
+                'connection_type',
+                NtripSession::TYPE_ROVER,
+            )
+            ->values();
 
         return [
             /*
@@ -143,12 +175,9 @@ final class DashboardSnapshotService
             /*
              * Chỉ trả về các session chưa disconnected.
              */
-            'active_sessions' => $activeSessions
-                ->map(
-                    fn (NtripSession $session): array => $this->sessionPayload($session),
-                )
-                ->values()
-                ->all(),
+            'active_sessions' => $activeSessionPayloads->all(),
+
+            'active_rovers' => $activeRoverPayloads->all(),
 
             'summary' => [
                 'station_count' => $stations->count(),
@@ -263,63 +292,6 @@ final class DashboardSnapshotService
                     'name' => $station->name,
                     'enabled' => $station->enabled,
                     'source_connected' => $station->source_connected,
-                ],
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sessionPayload(
-        NtripSession $session,
-    ): array {
-        $mountpoint = $session->mountpoint;
-        $station = $mountpoint?->station;
-
-        return [
-            'id' => $session->id,
-            'mountpoint_id' => $session->mountpoint_id,
-            'station_id' => $session->station_id,
-            'rover_account_id' => $session->rover_account_id,
-
-            'connection_type' => $session->connection_type,
-
-            'authenticated_username' => $session->authenticated_username,
-
-            'client_agent' => $session->client_agent,
-            'ntrip_version' => $session->ntrip_version,
-            'remote_ip' => $session->remote_ip,
-
-            'connected_at' => $session
-                ->connected_at
-                ?->toIso8601String(),
-
-            'disconnected_at' => $session
-                ->disconnected_at
-                ?->toIso8601String(),
-
-            'bytes_transferred' => $session->bytes_transferred,
-
-            'valid_rtcm_frames' => $session->valid_rtcm_frames,
-
-            'rtcm_crc_errors' => $session->rtcm_crc_errors,
-
-            'rtcm_message_counts' => $session->rtcm_message_counts ?? [],
-
-            'mountpoint' => $mountpoint === null
-                ? null
-                : [
-                    'id' => $mountpoint->id,
-                    'station_id' => $mountpoint->station_id,
-                    'name' => $mountpoint->name,
-
-                    'station' => $station === null
-                        ? null
-                        : [
-                            'id' => $station->id,
-                            'device_id' => $station->device_id,
-                            'name' => $station->name,
-                        ],
                 ],
         ];
     }

@@ -33,6 +33,11 @@ abstract class NtripSessionEvent implements ShouldBroadcast
         return 'ntrip.session.'.$this->action();
     }
 
+    public function broadcastQueue(): string
+    {
+        return 'realtime';
+    }
+
     /**
      * @return array<string, mixed>
      */

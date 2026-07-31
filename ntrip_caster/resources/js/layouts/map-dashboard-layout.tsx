@@ -21,7 +21,7 @@ export default function MapDashboardLayout({
     children,
 }: MapDashboardLayoutProps) {
     const dashboardData = useDashboardData();
-    const { stations } = dashboardData;
+    const { roverSessions, stations } = dashboardData;
 
     const mapRef = useRef<NtripMapHandle | null>(null);
 
@@ -151,6 +151,7 @@ export default function MapDashboardLayout({
                     <NtripMap
                         ref={mapRef}
                         stations={stations}
+                        rovers={roverSessions}
                         selectedStationId={resolvedSelectedStationId}
                         activeStationId={activeStationId}
                         onSelectStation={(stationId) => {

@@ -29,9 +29,7 @@ Broadcast::channel(
  */
 Broadcast::channel(
     'ntrip.dashboard',
-    function (User $user): bool {
-        return true;
-    }
+    fn (User $user): bool => true,
 );
 
 /*

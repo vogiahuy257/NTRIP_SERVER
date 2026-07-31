@@ -1,26 +1,29 @@
+import maplibregl from 'maplibre-gl';
+
+import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
 import {
     forwardRef,
+    useCallback,
     useEffect,
     useImperativeHandle,
     useRef,
     useState,
 } from 'react';
 
-import maplibregl from 'maplibre-gl';
-
-import type {
-    Map as MapLibreMap,
-    StyleSpecification,
-} from 'maplibre-gl';
-
 import 'maplibre-gl/dist/maplibre-gl.css';
 
-import type { DashboardStation } from '@/types/ntrip-dashboard';
-
 import {
-    NtripThreeModelLayer,
-    type NtripMapModelEntity,
-} from '@/components/map-dashboard/ntrip-three-model-layer';
+    buildNtripMapEntities,
+    buildStationEntityId,
+    collectNetworkCoordinates,
+    hasStationMapPosition,
+} from '@/components/map-dashboard/ntrip-map-entities';
+import { NtripThreeModelLayer } from '@/components/map-dashboard/ntrip-three-model-layer';
+
+import type {
+    DashboardRoverSession,
+    DashboardStation,
+} from '@/types/ntrip-dashboard';
 
 export type StationMapAnchor = {
     stationId: DashboardStation['id'];
@@ -32,20 +35,23 @@ export type StationMapAnchor = {
 export type NtripMapHandle = {
     zoomIn: () => void;
     zoomOut: () => void;
-    fitStations: () => void;
+    fitNetwork: () => void;
     focusSelected: () => void;
+    focusCoordinates: (longitude: number, latitude: number) => void;
 };
 
 type NtripMapProps = {
     stations: DashboardStation[];
+    rovers: DashboardRoverSession[];
+
     selectedStationId: DashboardStation['id'] | null;
     activeStationId: DashboardStation['id'] | null;
+
     onSelectStation: (stationId: DashboardStation['id']) => void;
     onHoverStation: (stationId: DashboardStation['id'] | null) => void;
+
     onStationAnchorChange: (anchor: StationMapAnchor | null) => void;
 };
-
-const STATION_MODEL_SCALE_METERS = 35;
 
 const DEVELOPMENT_MAP_STYLE: StyleSpecification = {
     version: 8,
@@ -75,44 +81,22 @@ const DEVELOPMENT_MAP_STYLE: StyleSpecification = {
     ],
 };
 
-function hasValidCoordinates(station: DashboardStation): boolean {
+function isValidMapCoordinate(longitude: number, latitude: number): boolean {
     return (
-        Number.isFinite(station.longitude) &&
-        Number.isFinite(station.latitude) &&
-        station.longitude >= -180 &&
-        station.longitude <= 180 &&
-        station.latitude >= -90 &&
-        station.latitude <= 90
+        Number.isFinite(longitude) &&
+        Number.isFinite(latitude) &&
+        longitude >= -180 &&
+        longitude <= 180 &&
+        latitude >= -90 &&
+        latitude <= 90
     );
-}
-
-function buildStationEntityId(
-    stationId: DashboardStation['id'],
-): string {
-    return `station:${stationId}`;
-}
-
-function buildStationModelEntities(
-    stations: DashboardStation[],
-    selectedStationId: DashboardStation['id'] | null,
-): NtripMapModelEntity[] {
-    return stations.filter(hasValidCoordinates).map((station) => ({
-        id: buildStationEntityId(station.id),
-        kind: 'station',
-        longitude: station.longitude,
-        latitude: station.latitude,
-        altitude: 0,
-        scaleMeters: STATION_MODEL_SCALE_METERS,
-        selected:
-            selectedStationId !== null &&
-            String(station.id) === String(selectedStationId),
-    }));
 }
 
 export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
     function NtripMap(
         {
             stations,
+            rovers,
             selectedStationId,
             activeStationId,
             onSelectStation,
@@ -125,21 +109,18 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
 
         const mapRef = useRef<MapLibreMap | null>(null);
 
-        const threeLayerRef =
-            useRef<NtripThreeModelLayer | null>(null);
+        const threeLayerRef = useRef<NtripThreeModelLayer | null>(null);
 
         const stationsRef = useRef(stations);
+        const roversRef = useRef(rovers);
 
         const selectedStationIdRef = useRef(selectedStationId);
-
         const activeStationIdRef = useRef(activeStationId);
 
         const onSelectStationRef = useRef(onSelectStation);
-
         const onHoverStationRef = useRef(onHoverStation);
 
-        const onStationAnchorChangeRef =
-            useRef(onStationAnchorChange);
+        const onStationAnchorChangeRef = useRef(onStationAnchorChange);
 
         const anchorFrameRef = useRef<number | null>(null);
 
@@ -148,15 +129,17 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
         const [loadTimedOut, setLoadTimedOut] = useState(false);
 
         stationsRef.current = stations;
+        roversRef.current = rovers;
+
         selectedStationIdRef.current = selectedStationId;
         activeStationIdRef.current = activeStationId;
 
         onSelectStationRef.current = onSelectStation;
         onHoverStationRef.current = onHoverStation;
-        onStationAnchorChangeRef.current =
-            onStationAnchorChange;
 
-        const getSelectedStation = (): DashboardStation | null => {
+        onStationAnchorChangeRef.current = onStationAnchorChange;
+
+        const getSelectedStation = useCallback((): DashboardStation | null => {
             if (selectedStationIdRef.current === null) {
                 return null;
             }
@@ -168,73 +151,69 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                         String(selectedStationIdRef.current),
                 ) ?? null
             );
-        };
+        }, []);
 
-        const findStationByEntityId = (
-            entityId: string | null,
-        ): DashboardStation | null => {
-            if (!entityId) {
-                return null;
-            }
+        const findStationByEntityId = useCallback(
+            (entityId: string | null): DashboardStation | null => {
+                if (!entityId) {
+                    return null;
+                }
 
-            return (
-                stationsRef.current.find(
-                    (station) =>
-                        buildStationEntityId(station.id) ===
-                        entityId,
-                ) ?? null
-            );
-        };
+                return (
+                    stationsRef.current.find(
+                        (station) =>
+                            buildStationEntityId(station.id) === entityId,
+                    ) ?? null
+                );
+            },
+            [],
+        );
 
-        const synchronizeThreeStations = (): void => {
+        const synchronizeThreeEntities = useCallback((): void => {
             threeLayerRef.current?.setEntities(
-                buildStationModelEntities(
+                buildNtripMapEntities(
                     stationsRef.current,
+                    roversRef.current,
                     selectedStationIdRef.current,
                 ),
             );
-        };
+        }, []);
 
-        const publishActiveStationAnchor = (): void => {
+        const publishActiveStationAnchor = useCallback((): void => {
             const map = mapRef.current;
-            const currentActiveStationId =
-                activeStationIdRef.current;
+            const currentActiveStationId = activeStationIdRef.current;
 
             if (!map || currentActiveStationId === null) {
                 onStationAnchorChangeRef.current(null);
+
                 return;
             }
 
             const station = stationsRef.current.find(
-                (item) =>
-                    String(item.id) ===
-                    String(currentActiveStationId),
+                (item) => String(item.id) === String(currentActiveStationId),
             );
 
-            if (!station || !hasValidCoordinates(station)) {
+            if (!station || !hasStationMapPosition(station)) {
                 onStationAnchorChangeRef.current(null);
+
                 return;
             }
 
-            const containerBounds = map
-                .getContainer()
-                .getBoundingClientRect();
+            const containerBounds = map.getContainer().getBoundingClientRect();
 
             const entityId = buildStationEntityId(station.id);
 
             const imageBounds =
-                threeLayerRef.current?.getEntityScreenBounds(
-                    entityId,
-                );
+                threeLayerRef.current?.getEntityScreenBounds(entityId);
 
             /*
-            * Khoảng cách giữa ảnh station và detail card.
-            */
+             * Khoảng cách giữa ảnh station và detail card.
+             */
             const gap = 0;
 
             /*
-            * Ước lượng chiều rộng card để quyết định mở trái hay phải.
-            */
+             * Ước lượng chiều rộng card để quyết định mở trái hay phải.
+             */
             const estimatedCardWidth = 0;
 
             if (imageBounds) {
@@ -242,13 +221,12 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                     containerBounds.left + imageBounds.right;
 
                 const hasEnoughSpaceOnRight =
-                    imageRightOnScreen +
-                        gap +
-                        estimatedCardWidth <
+                    imageRightOnScreen + gap + estimatedCardWidth <
                     window.innerWidth - 12;
 
-                const side: 'left' | 'right' =
-                    hasEnoughSpaceOnRight ? 'right' : 'left';
+                const side: 'left' | 'right' = hasEnoughSpaceOnRight
+                    ? 'right'
+                    : 'left';
 
                 const localX =
                     side === 'right'
@@ -256,15 +234,12 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                         : imageBounds.left - gap;
 
                 /*
-                * Neo card gần phần trên của hình,
-                * nhưng không đặt trực tiếp tại chân station.
-                */
+                 * Neo card gần phần trên của hình,
+                 * nhưng không đặt trực tiếp tại chân station.
+                 */
                 const localY =
                     imageBounds.top +
-                    Math.min(
-                        Math.max(imageBounds.height * 0.22, 20),
-                        48,
-                    );
+                    Math.min(Math.max(imageBounds.height * 0.22, 20), 48);
 
                 onStationAnchorChangeRef.current({
                     stationId: station.id,
@@ -277,49 +252,42 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
             }
 
             /*
-            * Fallback khi ảnh chưa load hoặc chưa được render.
-            */
-            const point = map.project([
-                station.longitude,
-                station.latitude,
-            ]);
+             * Fallback khi ảnh chưa load hoặc chưa được render.
+             */
+            const point = map.project([station.longitude, station.latitude]);
 
-            const fallbackX =
-                containerBounds.left + point.x + gap;
+            const fallbackX = containerBounds.left + point.x + gap;
 
-            const fallbackY =
-                containerBounds.top + point.y - 80;
+            const fallbackY = containerBounds.top + point.y - 80;
 
             onStationAnchorChangeRef.current({
                 stationId: station.id,
                 x: fallbackX,
                 y: fallbackY,
-                side:
-                    fallbackX > window.innerWidth * 0.68
-                        ? 'left'
-                        : 'right',
+                side: fallbackX > window.innerWidth * 0.68 ? 'left' : 'right',
             });
-        };
+        }, []);
 
-        const scheduleActiveStationAnchor = (): void => {
+        const scheduleActiveStationAnchor = useCallback((): void => {
             if (anchorFrameRef.current !== null) {
                 return;
             }
 
-            anchorFrameRef.current =
-                window.requestAnimationFrame(() => {
-                    anchorFrameRef.current = null;
-                    publishActiveStationAnchor();
-                });
-        };
+            anchorFrameRef.current = window.requestAnimationFrame(() => {
+                anchorFrameRef.current = null;
+                publishActiveStationAnchor();
+            });
+        }, [publishActiveStationAnchor]);
 
-        const fitStations = (): void => {
+        const fitNetwork = useCallback((): void => {
             const map = mapRef.current;
 
-            const currentStations =
-                stationsRef.current.filter(hasValidCoordinates);
+            const coordinates = collectNetworkCoordinates(
+                stationsRef.current,
+                roversRef.current,
+            );
 
-            if (!map || currentStations.length === 0) {
+            if (!map || coordinates.length === 0) {
                 return;
             }
 
@@ -333,12 +301,9 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 return;
             }
 
-            if (currentStations.length === 1) {
+            if (coordinates.length === 1) {
                 map.easeTo({
-                    center: [
-                        currentStations[0].longitude,
-                        currentStations[0].latitude,
-                    ],
+                    center: [coordinates[0].longitude, coordinates[0].latitude],
                     zoom: 14,
                     duration: 700,
                 });
@@ -346,33 +311,22 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 return;
             }
 
-            const bounds = currentStations.reduce(
-                (result, station) =>
-                    result.extend([
-                        station.longitude,
-                        station.latitude,
-                    ]),
+            const bounds = coordinates.reduce(
+                (result, coordinate) =>
+                    result.extend([coordinate.longitude, coordinate.latitude]),
                 new maplibregl.LngLatBounds(),
             );
 
             const desktop = width >= 1280;
 
-            const top = Math.min(
-                152,
-                Math.round(height * 0.16),
-            );
+            const top = Math.min(152, Math.round(height * 0.16));
 
             const right = desktop
                 ? Math.min(296, Math.round(width * 0.176))
                 : 19;
 
             const bottom =
-                height >= 720
-                    ? Math.min(
-                          264,
-                          Math.round(height * 0.24),
-                      )
-                    : 19;
+                height >= 720 ? Math.min(264, Math.round(height * 0.24)) : 19;
 
             const left = 19;
 
@@ -381,8 +335,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
 
             map.fitBounds(bounds, {
                 padding:
-                    usableWidth >= 180 &&
-                    usableHeight >= 180
+                    usableWidth >= 180 && usableHeight >= 180
                         ? {
                               top,
                               right,
@@ -394,17 +347,13 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 maxZoom: 14,
                 duration: 800,
             });
-        };
+        }, []);
 
-        const focusSelected = (): void => {
+        const focusSelected = useCallback((): void => {
             const map = mapRef.current;
             const station = getSelectedStation();
 
-            if (
-                !map ||
-                !station ||
-                !hasValidCoordinates(station)
-            ) {
+            if (!map || !station || !hasStationMapPosition(station)) {
                 return;
             }
 
@@ -415,7 +364,26 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 zoom: 18,
                 duration: 650,
             });
-        };
+        }, [getSelectedStation]);
+
+        const focusCoordinates = useCallback(
+            (longitude: number, latitude: number): void => {
+                const map = mapRef.current;
+
+                if (!map || !isValidMapCoordinate(longitude, latitude)) {
+                    return;
+                }
+
+                map.resize();
+
+                map.easeTo({
+                    center: [longitude, latitude],
+                    zoom: 18,
+                    duration: 650,
+                });
+            },
+            [],
+        );
 
         useImperativeHandle(
             forwardedRef,
@@ -430,10 +398,11 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                         duration: 220,
                     }),
 
-                fitStations,
+                fitNetwork,
                 focusSelected,
+                focusCoordinates,
             }),
-            [],
+            [fitNetwork, focusCoordinates, focusSelected],
         );
 
         useEffect(() => {
@@ -450,10 +419,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
             let loadTimeoutId: number | null = null;
 
             const startMap = (): void => {
-                if (
-                    cancelled ||
-                    !containerRef.current
-                ) {
+                if (cancelled || !containerRef.current) {
                     return;
                 }
 
@@ -494,15 +460,9 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
 
                 resizeObserver.observe(container);
 
-                map.on(
-                    'move',
-                    scheduleActiveStationAnchor,
-                );
+                map.on('move', scheduleActiveStationAnchor);
 
-                map.on(
-                    'resize',
-                    scheduleActiveStationAnchor,
-                );
+                map.on('resize', scheduleActiveStationAnchor);
 
                 loadTimeoutId = window.setTimeout(() => {
                     if (!map.loaded()) {
@@ -515,47 +475,43 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                         return;
                     }
 
-                    const threeLayer =
-                        new NtripThreeModelLayer({
-                            onHoverEntity: (entityId) => {
-                                const station =
-                                    findStationByEntityId(
-                                        entityId,
-                                    );
+                    const threeLayer = new NtripThreeModelLayer({
+                        onHoverEntity: (entityId) => {
+                            /*
+                             * Rover chưa có detail card riêng.
+                             * Entity Rover sẽ không khớp station ID,
+                             * vì vậy hover Station được xóa an toàn.
+                             */
+                            const station = findStationByEntityId(entityId);
 
-                                onHoverStationRef.current(
-                                    station?.id ?? null,
-                                );
-                            },
+                            onHoverStationRef.current(station?.id ?? null);
+                        },
 
-                            onSelectEntity: (entityId) => {
-                                const station =
-                                    findStationByEntityId(
-                                        entityId,
-                                    );
+                        onSelectEntity: (entityId) => {
+                            /*
+                             * Click Station giữ nguyên hành vi cũ.
+                             * Click Rover không làm thay đổi Station selection.
+                             */
+                            const station = findStationByEntityId(entityId);
 
-                                if (!station) {
-                                    return;
-                                }
+                            if (!station) {
+                                return;
+                            }
 
-                                onSelectStationRef.current(
-                                    station.id,
-                                );
-                            },
-                        });
+                            onSelectStationRef.current(station.id);
+                        },
+                    });
 
                     threeLayerRef.current = threeLayer;
 
                     map.addLayer(threeLayer);
 
-                    synchronizeThreeStations();
+                    synchronizeThreeEntities();
                 });
 
                 map.once('load', () => {
                     if (loadTimeoutId !== null) {
-                        window.clearTimeout(
-                            loadTimeoutId,
-                        );
+                        window.clearTimeout(loadTimeoutId);
                     }
 
                     setLoadTimedOut(false);
@@ -564,24 +520,19 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                         map.resize();
 
                         window.setTimeout(() => {
-                            fitStations();
+                            fitNetwork();
 
-                            initialFitCompletedRef.current =
-                                true;
+                            initialFitCompletedRef.current = true;
                         }, 80);
                     });
                 });
 
                 map.on('error', (event) => {
-                    console.error(
-                        'MapLibre error:',
-                        event.error,
-                    );
+                    console.error('MapLibre error:', event.error);
                 });
             };
 
-            const frameId =
-                window.requestAnimationFrame(startMap);
+            const frameId = window.requestAnimationFrame(startMap);
 
             return () => {
                 cancelled = true;
@@ -595,9 +546,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 resizeObserver?.disconnect();
 
                 if (anchorFrameRef.current !== null) {
-                    window.cancelAnimationFrame(
-                        anchorFrameRef.current,
-                    );
+                    window.cancelAnimationFrame(anchorFrameRef.current);
 
                     anchorFrameRef.current = null;
                 }
@@ -610,42 +559,47 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
                 mapRef.current?.remove();
                 mapRef.current = null;
             };
-        }, []);
+        }, [
+            findStationByEntityId,
+            fitNetwork,
+            scheduleActiveStationAnchor,
+            synchronizeThreeEntities,
+        ]);
 
         useEffect(() => {
-            synchronizeThreeStations();
+            synchronizeThreeEntities();
             scheduleActiveStationAnchor();
 
             const map = mapRef.current;
 
-            if (
-                map?.loaded() &&
-                !initialFitCompletedRef.current
-            ) {
+            if (map?.loaded() && !initialFitCompletedRef.current) {
                 window.requestAnimationFrame(() => {
-                    fitStations();
+                    fitNetwork();
 
                     initialFitCompletedRef.current = true;
                 });
             }
-        }, [stations]);
+        }, [
+            fitNetwork,
+            rovers,
+            scheduleActiveStationAnchor,
+            stations,
+            synchronizeThreeEntities,
+        ]);
 
         useEffect(() => {
             scheduleActiveStationAnchor();
-        }, [activeStationId]);
+        }, [activeStationId, scheduleActiveStationAnchor]);
 
         useEffect(() => {
-            synchronizeThreeStations();
-        }, [selectedStationId]);
+            synchronizeThreeEntities();
+        }, [selectedStationId, synchronizeThreeEntities]);
 
         useEffect(() => {
-            if (
-                selectedStationId !== null &&
-                initialFitCompletedRef.current
-            ) {
+            if (selectedStationId !== null && initialFitCompletedRef.current) {
                 focusSelected();
             }
-        }, [selectedStationId]);
+        }, [focusSelected, selectedStationId]);
 
         return (
             <div className="ntrip-map absolute inset-0 z-0 size-full overflow-hidden bg-ntrip-cloud">

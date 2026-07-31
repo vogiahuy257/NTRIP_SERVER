@@ -245,4 +245,28 @@ return [
         'detail_retention_hours' => 24,
         'rollup_retention_days' => 30,
     ],
+    /*
+     * Buffer đầu vào riêng cho mỗi Rover socket.
+     */
+    'rover_input_buffer_bytes' => (int) env(
+        'NTRIP_ROVER_INPUT_BUFFER_BYTES',
+        8192,
+    ),
+
+    /*
+     * Giới hạn ghi database và phát WebSocket tối đa
+     * một lần mỗi giây cho từng Rover.
+     */
+    'rover_gga_min_interval_ms' => (int) env(
+        'NTRIP_ROVER_GGA_MIN_INTERVAL_MS',
+        1000,
+    ),
+
+    /*
+     * Không log từng GGA trong production.
+     */
+    'log_rover_gga' => (bool) env(
+        'NTRIP_LOG_ROVER_GGA',
+        false,
+    ),
 ];

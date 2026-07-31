@@ -1,4 +1,4 @@
-import { Crosshair, Focus, Layers3, Minus, Plus } from 'lucide-react';
+import { Crosshair, Focus, Minus, Plus } from 'lucide-react';
 
 import type { ReactNode } from 'react';
 
@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 type DashboardMapControlsProps = {
     onZoomIn: () => void;
     onZoomOut: () => void;
-    onFitStations: () => void;
+    onFitNetwork: () => void;
     onFocusSelected: () => void;
 };
 
@@ -39,7 +39,7 @@ function MapControlButton({
 export function DashboardMapControls({
     onZoomIn,
     onZoomOut,
-    onFitStations,
+    onFitNetwork,
     onFocusSelected,
 }: DashboardMapControlsProps) {
     return (
@@ -57,12 +57,12 @@ export function DashboardMapControls({
                 <Minus className="size-3.5" />
             </MapControlButton>
 
-            <MapControlButton label="Fit all stations" onClick={onFitStations}>
+            <MapControlButton label="Fit network" onClick={onFitNetwork}>
                 <Focus className="size-3.5" />
             </MapControlButton>
 
             <MapControlButton
-                label="Focus selected station"
+                label="Focus selected item"
                 onClick={onFocusSelected}
             >
                 <Crosshair className="size-3.5" />
