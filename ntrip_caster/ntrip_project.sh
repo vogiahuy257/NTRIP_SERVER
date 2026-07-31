@@ -51,6 +51,7 @@ REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 REDIS_MAXMEMORY="${REDIS_MAXMEMORY:-}"
 REDIS_SERVICE_NAME="${REDIS_SERVICE_NAME:-redis-server}"
+REDIS_CONFIG_FILE="${REDIS_CONFIG_FILE:-/etc/redis/ntrip-redis.conf}"
 
 REVERB_PORT="${REVERB_PORT:-8080}"
 NTRIP_PORT="${NTRIP_PORT:-2101}"
@@ -649,23 +650,75 @@ resolve_redis_maxmemory() {
     fi
 }
 
-set_redis_config_option() {
-    local key="$1"
-    local value="$2"
-    local redis_conf="/etc/redis/redis.conf"
+write_redis_managed_config() {
+    local maxmemory="$1"
+    local redis_directory="/var/lib/redis"
 
-    [[ -f "$redis_conf" ]] || fail "Redis configuration was not found: $redis_conf"
+    $SUDO install -d -m 0750 -o redis -g redis "$redis_directory"
+    $SUDO install -d -m 0755 -o root -g root "$(dirname "$REDIS_CONFIG_FILE")"
 
-    if $SUDO grep -Eq \
-        "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]+" \
-        "$redis_conf"; then
-        $SUDO sed -ri \
-            "s|^[[:space:]]*#?[[:space:]]*${key}[[:space:]]+.*|${key} ${value}|" \
-            "$redis_conf"
-    else
-        printf '%s %s\n' "$key" "$value" |
-            $SUDO tee -a "$redis_conf" >/dev/null
-    fi
+    $SUDO tee "$REDIS_CONFIG_FILE" >/dev/null <<CONF
+# Managed by ntrip_project.sh. Manual edits may be overwritten.
+bind 127.0.0.1
+protected-mode yes
+port ${REDIS_PORT}
+tcp-backlog 511
+timeout 0
+tcp-keepalive 60
+
+daemonize no
+supervised systemd
+loglevel notice
+logfile ""
+always-show-logo no
+
+databases 16
+dir ${redis_directory}
+dbfilename dump.rdb
+
+save 3600 1
+save 300 100
+save 60 10000
+stop-writes-on-bgsave-error yes
+rdbcompression yes
+rdbchecksum yes
+
+appendonly yes
+appendfilename "appendonly.aof"
+appenddirname "appendonlydir"
+appendfsync everysec
+no-appendfsync-on-rewrite no
+auto-aof-rewrite-percentage 100
+auto-aof-rewrite-min-size 64mb
+
+maxmemory ${maxmemory}
+maxmemory-policy noeviction
+CONF
+
+    $SUDO chown root:redis "$REDIS_CONFIG_FILE"
+    $SUDO chmod 640 "$REDIS_CONFIG_FILE"
+}
+
+write_redis_systemd_override() {
+    local redis_service="$1"
+    local redis_binary
+    local override_directory
+
+    redis_binary="$(command -v redis-server)"
+    [[ -n "$redis_binary" ]] || fail "redis-server binary was not found."
+
+    override_directory="/etc/systemd/system/${redis_service}.service.d"
+    $SUDO install -d -m 0755 "$override_directory"
+
+    $SUDO tee "$override_directory/override.conf" >/dev/null <<UNIT
+[Unit]
+After=network-online.target ntrip-disable-transparent-huge-pages.service
+Wants=network-online.target
+
+[Service]
+ExecStart=
+ExecStart=${redis_binary} ${REDIS_CONFIG_FILE} --supervised systemd
+UNIT
 }
 
 detect_redis_service_name() {
@@ -751,34 +804,28 @@ configure_redis_server() {
 
     log "Configuring Redis for local Laravel cache, queue and session workloads"
 
-    set_redis_config_option bind "127.0.0.1"
-    set_redis_config_option protected-mode "yes"
-    set_redis_config_option port "$REDIS_PORT"
-    set_redis_config_option supervised "systemd"
-    set_redis_config_option daemonize "no"
-
-    set_redis_config_option appendonly "yes"
-    set_redis_config_option appendfsync "everysec"
-
-    set_redis_config_option maxmemory "$maxmemory"
-    set_redis_config_option maxmemory-policy "noeviction"
-
-    set_redis_config_option timeout "0"
-    set_redis_config_option tcp-keepalive "60"
-
     configure_redis_kernel
 
     REDIS_SERVICE_NAME="$(detect_redis_service_name)"
 
+    write_redis_managed_config "$maxmemory"
+    write_redis_systemd_override "$REDIS_SERVICE_NAME"
+
+    $SUDO systemctl daemon-reload
     $SUDO systemctl enable --now "$REDIS_SERVICE_NAME"
-    $SUDO systemctl restart "$REDIS_SERVICE_NAME"
+
+    if ! $SUDO systemctl restart "$REDIS_SERVICE_NAME"; then
+        $SUDO systemctl status "$REDIS_SERVICE_NAME" --no-pager || true
+        $SUDO journalctl -u "$REDIS_SERVICE_NAME" -n 80 --no-pager || true
+        fail "Redis failed to restart with ${REDIS_CONFIG_FILE}."
+    fi
 
     if command_exists ufw && \
        $SUDO ufw status 2>/dev/null | grep -q '^Status: active'; then
         $SUDO ufw deny "${REDIS_PORT}/tcp" >/dev/null 2>&1 || true
     fi
 
-    ok "Redis configured with maxmemory=${maxmemory}, AOF everysec and noeviction."
+    ok "Redis configured with ${REDIS_CONFIG_FILE}, maxmemory=${maxmemory}, AOF everysec and noeviction."
 }
 
 check_redis_environment() {
