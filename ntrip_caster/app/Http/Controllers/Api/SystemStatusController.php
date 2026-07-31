@@ -6,11 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Mountpoint;
 use App\Models\NtripSession;
 use App\Models\Station;
+use App\Services\System\RedisHealthService;
 use Illuminate\Http\JsonResponse;
 
 class SystemStatusController extends Controller
 {
-    public function __invoke(): JsonResponse
+    public function __invoke(RedisHealthService $redisHealth): JsonResponse
     {
         $activeSources = NtripSession::query()
             ->where('connection_type', 'source')
@@ -37,6 +38,8 @@ class SystemStatusController extends Controller
                 'name' => 'NTRIP Caster Backend',
                 'time' => now()->toIso8601String(),
             ],
+
+            'redis' => $redisHealth->snapshot(),
 
             'caster' => [
                 'host' => config('ntrip.host'),

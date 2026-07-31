@@ -37,12 +37,6 @@ Route::prefix('v1')->group(function (): void {
         DeviceProvisioningController::class,
     )->name('device-provisioning.show');
 
-    // system status
-    Route::get(
-        '/system/status',
-        SystemStatusController::class
-    );
-
     // stations
     Route::get(
         '/stations/{deviceId}/config',
@@ -82,6 +76,8 @@ Route::prefix('v1')->group(function (): void {
 
     // rover accounts
     Route::middleware(['auth:sanctum', 'verified'])->group(function (): void {
+
+        Route::get('system/status', SystemStatusController::class)->name('system.status');
 
         Route::get(
             'observability/rtcm-flow/snapshot',

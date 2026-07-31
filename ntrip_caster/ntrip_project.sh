@@ -1046,6 +1046,35 @@ configure_redis_env() {
         REDIS_CACHE_LOCK_CONNECTION \
         "default"
 
+    # Redis monitoring thresholds.
+    set_env_value \
+        REDIS_MONITORING_ENABLED \
+        "true"
+
+    set_env_value \
+        REDIS_LATENCY_WARNING_MS \
+        "25"
+
+    set_env_value \
+        REDIS_LATENCY_CRITICAL_MS \
+        "100"
+
+    set_env_value \
+        REDIS_MEMORY_WARNING_PERCENT \
+        "70"
+
+    set_env_value \
+        REDIS_MEMORY_CRITICAL_PERCENT \
+        "85"
+
+    set_env_value \
+        REDIS_QUEUE_WARNING_SIZE \
+        "100"
+
+    set_env_value \
+        REDIS_QUEUE_CRITICAL_SIZE \
+        "500"
+
     # Realtime RTCM observability snapshot.
     set_env_value \
         NTRIP_OBSERVABILITY_LATEST_CACHE_STORE \
@@ -1828,6 +1857,13 @@ check_required_env_keys() {
         NTRIP_OBSERVABILITY_HOST NTRIP_OBSERVABILITY_PORT
         NTRIP_OBSERVABILITY_SNAPSHOT_MS NTRIP_OBSERVABILITY_BIND_HOST
         ALERT_ENGINE_ENABLED
+        REDIS_MONITORING_ENABLED
+        REDIS_LATENCY_WARNING_MS
+        REDIS_LATENCY_CRITICAL_MS
+        REDIS_MEMORY_WARNING_PERCENT
+        REDIS_MEMORY_CRITICAL_PERCENT
+        REDIS_QUEUE_WARNING_SIZE
+        REDIS_QUEUE_CRITICAL_SIZE
     )
 
     [[ -f "$ENV_FILE" ]] || { warn ".env is missing"; return 1; }
