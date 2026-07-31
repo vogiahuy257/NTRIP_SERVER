@@ -19,3 +19,10 @@ Schedule::command(
 )
     ->everyMinute()
     ->withoutOverlapping(5);
+
+Schedule::command(
+    'queue:monitor redis:realtime,redis:alerts,redis:default --max=100',
+)
+    ->name('queues:monitor')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -1046,6 +1046,15 @@ configure_redis_env() {
         REDIS_CACHE_LOCK_CONNECTION \
         "default"
 
+    # Realtime RTCM observability snapshot.
+    set_env_value \
+        NTRIP_OBSERVABILITY_LATEST_CACHE_STORE \
+        "redis"
+
+    set_env_value \
+        NTRIP_OBSERVABILITY_LATEST_TTL_SECONDS \
+        "10"
+
     # Redis queue with PostgreSQL failover.
     set_env_value QUEUE_CONNECTION "failover"
 

@@ -19,9 +19,13 @@ use App\Services\Observability\UdpRtcmFlowDatagramReceiver;
 use App\Services\Observability\UdpRtcmFlowSnapshotTransport;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Queue\Events\QueueBusy;
+use Illuminate\Queue\Events\QueueFailedOver;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use InvalidArgumentException;
@@ -256,6 +260,56 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureQueueMonitoring();
+    }
+
+    /**
+     * Register queue backlog and failover monitoring.
+     */
+    protected function configureQueueMonitoring(): void
+    {
+        Event::listen(
+            QueueBusy::class,
+            function (QueueBusy $event): void {
+                Log::warning(
+                    'Queue backlog threshold exceeded.',
+                    [
+                        'connection' => $event->connectionName,
+                        'queue' => $event->queue,
+                        'size' => $event->size,
+                        'threshold' => 100,
+                    ],
+                );
+            },
+        );
+
+        Event::listen(
+            QueueFailedOver::class,
+            function (QueueFailedOver $event): void {
+                $command = match (true) {
+                    is_object($event->command) => $event->command::class,
+
+                    is_string($event->command) => $event->command,
+
+                    default => get_debug_type(
+                        $event->command,
+                    ),
+                };
+
+                Log::error(
+                    'Queue connection failed over.',
+                    [
+                        'failed_connection' => $event->connectionName,
+
+                        'command' => $command,
+
+                        'exception' => $event->exception::class,
+
+                        'message' => $event->exception->getMessage(),
+                    ],
+                );
+            },
+        );
     }
 
     /**
