@@ -47,6 +47,11 @@ POSTGRES_DB="${POSTGRES_DB:-ntrip_caster}"
 POSTGRES_USER="${POSTGRES_USER:-ntrip_app}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
+REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
+REDIS_PORT="${REDIS_PORT:-6379}"
+REDIS_MAXMEMORY="${REDIS_MAXMEMORY:-}"
+REDIS_SERVICE_NAME="${REDIS_SERVICE_NAME:-redis-server}"
+
 REVERB_PORT="${REVERB_PORT:-8080}"
 NTRIP_PORT="${NTRIP_PORT:-2101}"
 NTRIP_OBSERVABILITY_PORT="${NTRIP_OBSERVABILITY_PORT:-22101}"
@@ -506,6 +511,37 @@ set_env_value() {
     ' "$ENV_FILE" "$key" "$value"
 }
 
+set_env_literal() {
+    local key="$1"
+    local literal="$2"
+
+    [[ "$literal" =~ ^(null|true|false|[0-9]+)$ ]] || \
+        fail "Unsupported raw .env literal for ${key}: ${literal}"
+
+    php -r '
+        $file = $argv[1];
+        $key = $argv[2];
+        $literal = $argv[3];
+        $line = $key . "=" . $literal;
+        $contents = file_exists($file) ? file_get_contents($file) : "";
+        $pattern = "/^" . preg_quote($key, "/") . "=.*$/m";
+
+        if (preg_match($pattern, $contents) === 1) {
+            $contents = preg_replace($pattern, $line, $contents, 1);
+        } else {
+            if ($contents !== "" && ! str_ends_with($contents, "\n")) {
+                $contents .= "\n";
+            }
+            $contents .= $line . "\n";
+        }
+
+        if (file_put_contents($file, $contents) === false) {
+            fwrite(STDERR, "Cannot write environment file.\n");
+            exit(1);
+        }
+    ' "$ENV_FILE" "$key" "$literal"
+}
+
 backup_env() {
     [[ -f "$ENV_FILE" ]] || return 0
     mkdir -p "$BACKUP_DIR"
@@ -591,6 +627,327 @@ install_node() {
     fi
 }
 
+resolve_redis_maxmemory() {
+    if [[ -n "$REDIS_MAXMEMORY" ]]; then
+        printf '%s' "$REDIS_MAXMEMORY"
+        return 0
+    fi
+
+    local total_mb
+    total_mb="$(
+        awk '/MemTotal/ {
+            print int($2 / 1024)
+        }' /proc/meminfo
+    )"
+
+    if (( total_mb >= 16000 )); then
+        printf '1gb'
+    elif (( total_mb >= 8000 )); then
+        printf '512mb'
+    else
+        printf '256mb'
+    fi
+}
+
+set_redis_config_option() {
+    local key="$1"
+    local value="$2"
+    local redis_conf="/etc/redis/redis.conf"
+
+    [[ -f "$redis_conf" ]] || fail "Redis configuration was not found: $redis_conf"
+
+    if $SUDO grep -Eq \
+        "^[[:space:]]*#?[[:space:]]*${key}[[:space:]]+" \
+        "$redis_conf"; then
+        $SUDO sed -ri \
+            "s|^[[:space:]]*#?[[:space:]]*${key}[[:space:]]+.*|${key} ${value}|" \
+            "$redis_conf"
+    else
+        printf '%s %s\n' "$key" "$value" |
+            $SUDO tee -a "$redis_conf" >/dev/null
+    fi
+}
+
+detect_redis_service_name() {
+    if systemctl list-unit-files redis-server.service >/dev/null 2>&1; then
+        printf 'redis-server'
+        return 0
+    fi
+
+    if systemctl list-unit-files redis.service >/dev/null 2>&1; then
+        printf 'redis'
+        return 0
+    fi
+
+    printf '%s' "$REDIS_SERVICE_NAME"
+}
+
+install_redis_repository() {
+    local keyring="/usr/share/keyrings/redis-archive-keyring.gpg"
+    local source_file="/etc/apt/sources.list.d/redis.list"
+    local codename
+
+    codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-}")"
+    [[ -n "$codename" ]] || codename="$(lsb_release -cs)"
+
+    $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        ca-certificates curl gpg lsb-release
+
+    if [[ ! -s "$keyring" ]]; then
+        log "Installing the official Redis APT signing key"
+        curl -fsSL https://packages.redis.io/gpg |
+            $SUDO gpg --dearmor --yes -o "$keyring"
+        $SUDO chmod 644 "$keyring"
+    fi
+
+    local expected_source
+    expected_source="deb [signed-by=${keyring}] https://packages.redis.io/deb ${codename} main"
+
+    if [[ ! -f "$source_file" ]] || \
+       ! grep -Fxq "$expected_source" "$source_file"; then
+        printf '%s\n' "$expected_source" |
+            $SUDO tee "$source_file" >/dev/null
+        ok "Official Redis APT repository configured."
+    fi
+}
+
+configure_redis_kernel() {
+    log "Applying Redis Linux kernel settings"
+
+    printf 'vm.overcommit_memory = 1\n' |
+        $SUDO tee /etc/sysctl.d/99-ntrip-redis.conf >/dev/null
+
+    $SUDO sysctl --system >/dev/null
+
+    $SUDO tee \
+        /etc/systemd/system/ntrip-disable-transparent-huge-pages.service \
+        >/dev/null <<'UNIT'
+[Unit]
+Description=Disable Transparent Huge Pages for Redis
+DefaultDependencies=no
+After=sysinit.target local-fs.target
+Before=redis-server.service redis.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'if [ -f /sys/kernel/mm/transparent_hugepage/enabled ]; then echo never > /sys/kernel/mm/transparent_hugepage/enabled; fi'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+    $SUDO systemctl daemon-reload
+    $SUDO systemctl enable --now \
+        ntrip-disable-transparent-huge-pages.service
+}
+
+configure_redis_server() {
+    [[ "$REDIS_HOST" == "127.0.0.1" || "$REDIS_HOST" == "localhost" ]] || \
+        fail "The bundled Redis setup supports localhost only. REDIS_HOST=$REDIS_HOST"
+
+    local maxmemory
+    maxmemory="$(resolve_redis_maxmemory)"
+
+    log "Configuring Redis for local Laravel cache, queue and session workloads"
+
+    set_redis_config_option bind "127.0.0.1"
+    set_redis_config_option protected-mode "yes"
+    set_redis_config_option port "$REDIS_PORT"
+    set_redis_config_option supervised "systemd"
+    set_redis_config_option daemonize "no"
+
+    set_redis_config_option appendonly "yes"
+    set_redis_config_option appendfsync "everysec"
+
+    set_redis_config_option maxmemory "$maxmemory"
+    set_redis_config_option maxmemory-policy "noeviction"
+
+    set_redis_config_option timeout "0"
+    set_redis_config_option tcp-keepalive "60"
+
+    configure_redis_kernel
+
+    REDIS_SERVICE_NAME="$(detect_redis_service_name)"
+
+    $SUDO systemctl enable --now "$REDIS_SERVICE_NAME"
+    $SUDO systemctl restart "$REDIS_SERVICE_NAME"
+
+    if command_exists ufw && \
+       $SUDO ufw status 2>/dev/null | grep -q '^Status: active'; then
+        $SUDO ufw deny "${REDIS_PORT}/tcp" >/dev/null 2>&1 || true
+    fi
+
+    ok "Redis configured with maxmemory=${maxmemory}, AOF everysec and noeviction."
+}
+
+check_redis_environment() {
+    local errors=0
+    local redis_service
+    local listener_output=""
+
+    redis_service="$(detect_redis_service_name)"
+
+    command_exists redis-server || {
+        warn "redis-server is missing"
+        errors=$((errors + 1))
+    }
+
+    command_exists redis-cli || {
+        warn "redis-cli is missing"
+        errors=$((errors + 1))
+    }
+
+    if ! php -m |
+        tr '[:upper:]' '[:lower:]' |
+        grep -qx redis; then
+        warn "PHP extension missing: redis"
+        errors=$((errors + 1))
+    else
+        ok "PHP extension: redis"
+    fi
+
+    if systemctl is-active --quiet "$redis_service"; then
+        ok "Service active: $redis_service"
+    else
+        warn "Required service is not active: $redis_service"
+        errors=$((errors + 1))
+    fi
+
+    if command_exists redis-cli && \
+       [[ "$(redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" --raw PING 2>/dev/null || true)" == "PONG" ]]; then
+        ok "Redis PING: PONG"
+    else
+        warn "Redis PING failed at ${REDIS_HOST}:${REDIS_PORT}"
+        errors=$((errors + 1))
+    fi
+
+    listener_output="$(
+        $SUDO ss -ltnp 2>/dev/null |
+            grep -E ":${REDIS_PORT}([[:space:]]|$)" ||
+            true
+    )"
+
+    if [[ -z "$listener_output" ]]; then
+        warn "Redis is not listening on TCP ${REDIS_PORT}"
+        errors=$((errors + 1))
+    elif grep -Eq '0\.0\.0\.0:|\[::\]:' <<<"$listener_output"; then
+        warn "Redis is exposed on a public wildcard interface."
+        printf '%s\n' "$listener_output"
+        errors=$((errors + 1))
+    else
+        ok "Redis listens on localhost only."
+    fi
+
+    if command_exists redis-cli; then
+        local protected_mode appendonly appendfsync maxmemory_policy
+
+        protected_mode="$(
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+                --raw CONFIG GET protected-mode 2>/dev/null |
+                tail -n 1
+        )"
+
+        appendonly="$(
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+                --raw CONFIG GET appendonly 2>/dev/null |
+                tail -n 1
+        )"
+
+        appendfsync="$(
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+                --raw CONFIG GET appendfsync 2>/dev/null |
+                tail -n 1
+        )"
+
+        maxmemory_policy="$(
+            redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" \
+                --raw CONFIG GET maxmemory-policy 2>/dev/null |
+                tail -n 1
+        )"
+
+        [[ "$protected_mode" == "yes" ]] || {
+            warn "Redis protected-mode must be yes"
+            errors=$((errors + 1))
+        }
+
+        [[ "$appendonly" == "yes" ]] || {
+            warn "Redis appendonly must be yes"
+            errors=$((errors + 1))
+        }
+
+        [[ "$appendfsync" == "everysec" ]] || {
+            warn "Redis appendfsync must be everysec"
+            errors=$((errors + 1))
+        }
+
+        [[ "$maxmemory_policy" == "noeviction" ]] || {
+            warn "Redis maxmemory-policy must be noeviction"
+            errors=$((errors + 1))
+        }
+    fi
+
+    if [[ "$errors" -eq 0 ]]; then
+        ok "Redis installation and security checks passed."
+        return 0
+    fi
+
+    return 1
+}
+
+install_redis_environment() {
+    require_supported_os
+
+    local needs_install=false
+
+    command_exists redis-server || needs_install=true
+    command_exists redis-cli || needs_install=true
+
+    if ! php -m |
+        tr '[:upper:]' '[:lower:]' |
+        grep -qx redis; then
+        needs_install=true
+    fi
+
+    if is_true "$needs_install"; then
+        log "Installing Redis and PhpRedis"
+
+        install_redis_repository
+        $SUDO apt-get update
+
+        $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            redis \
+            "php${PHP_VERSION}-redis"
+    else
+        ok "Redis and PhpRedis are already installed."
+    fi
+
+    configure_redis_server
+
+    if systemctl list-unit-files "$PHP_FPM_SERVICE.service" >/dev/null 2>&1; then
+        $SUDO systemctl restart "$PHP_FPM_SERVICE"
+    fi
+
+    check_redis_environment || fail "Redis installation or configuration check failed."
+}
+
+configure_redis_env() {
+    [[ -f "$ENV_FILE" ]] || fail ".env is missing."
+
+    set_env_value REDIS_CLIENT "phpredis"
+    set_env_value REDIS_HOST "$REDIS_HOST"
+    set_env_literal REDIS_PASSWORD "null"
+    set_env_value REDIS_PORT "$REDIS_PORT"
+
+    set_env_value REDIS_DB "0"
+    set_env_value REDIS_CACHE_DB "1"
+    set_env_value REDIS_QUEUE_DB "2"
+    set_env_value REDIS_SESSION_DB "3"
+    set_env_value REDIS_PREFIX "ntrip:"
+
+    ok "Redis connection settings were written to .env."
+}
+
 install_system_environment() {
     require_supported_os
 
@@ -627,6 +984,7 @@ install_system_environment() {
         $SUDO update-alternatives --set php "/usr/bin/php${PHP_VERSION}" >/dev/null 2>&1 || true
     fi
 
+    install_redis_environment
     install_composer
     install_node
 
@@ -717,12 +1075,10 @@ configure_deployment_env() {
     set_env_value QUEUE_CONNECTION "database"
     set_env_value CACHE_STORE "database"
 
-    # Optional local services retained for compatibility
+    # Redis is installed and verified now. Runtime stores remain on
+    # database until the Laravel Redis migration is applied separately.
     set_env_value MEMCACHED_HOST "127.0.0.1"
-    set_env_value REDIS_CLIENT "phpredis"
-    set_env_value REDIS_HOST "127.0.0.1"
-    set_env_value REDIS_PASSWORD "null"
-    set_env_value REDIS_PORT "6379"
+    configure_redis_env
 
     # Mail defaults
     set_env_value MAIL_MAILER "log"
@@ -1259,7 +1615,7 @@ check_php_environment() {
     local errors=0
     local required_extensions=(
         bcmath ctype curl dom fileinfo filter hash intl json mbstring
-        openssl pcntl pdo pdo_pgsql session tokenizer xml zip
+        openssl pcntl pdo pdo_pgsql redis session tokenizer xml zip
     )
 
     command_exists php || { warn "php is missing"; return 1; }
@@ -1296,6 +1652,8 @@ check_required_env_keys() {
         SANCTUM_STATEFUL_DOMAINS
         DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD
         SESSION_DRIVER BROADCAST_CONNECTION QUEUE_CONNECTION CACHE_STORE
+        REDIS_CLIENT REDIS_HOST REDIS_PASSWORD REDIS_PORT
+        REDIS_DB REDIS_CACHE_DB REDIS_QUEUE_DB REDIS_SESSION_DB REDIS_PREFIX
         REVERB_APP_ID REVERB_APP_KEY REVERB_APP_SECRET
         REVERB_HOST REVERB_PORT REVERB_SCHEME
         REVERB_SERVER_HOST REVERB_SERVER_PORT
@@ -1361,7 +1719,7 @@ check_deployment() {
 
     log "Checking installed commands"
     local command_name
-    for command_name in php composer node npm git curl ip unzip psql pg_isready nginx; do
+    for command_name in php composer node npm git curl ip unzip psql pg_isready nginx redis-server redis-cli; do
         if command_exists "$command_name"; then
             ok "$command_name: $(command -v "$command_name")"
         else
@@ -1407,6 +1765,9 @@ check_deployment() {
             errors=$((errors + 1))
         fi
     fi
+
+    log "Checking Redis"
+    check_redis_environment || errors=$((errors + 1))
 
     log "Checking core services"
     check_service postgresql || errors=$((errors + 1))
@@ -1514,6 +1875,9 @@ release_project() {
     printf 'Project directory : %s\n' "$PROJECT_DIR"
     printf 'Git commit        : %s\n' "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
+    install_redis_environment
+    configure_redis_env
+
     log "Installing optimized PHP dependencies"
     COMPOSER_ALLOW_SUPERUSER=1 composer install \
         --no-dev \
@@ -1590,7 +1954,7 @@ show_help() {
 Usage:
   ./ntrip_project.sh                 Full automatic production installation
   ./ntrip_project.sh install         Same as the default command
-  ./ntrip_project.sh check           Verify packages, publish address, .env, PostgreSQL and services
+  ./ntrip_project.sh check           Verify packages, Redis, publish address, .env, PostgreSQL and services
   ./ntrip_project.sh network         Display public IP/domain and local IPv4
   ./ntrip_project.sh env             Create/update the production PostgreSQL .env
   ./ntrip_project.sh database        Create/update and test PostgreSQL
@@ -1616,6 +1980,10 @@ Common optional environment variables:
   EXPOSE_VITE_DEV=false
   PHP_VERSION=8.3
   NODE_MAJOR=22
+
+  REDIS_HOST=127.0.0.1
+  REDIS_PORT=6379
+  REDIS_MAXMEMORY=512mb             Optional override; auto-sized by default
 
   POSTGRES_HOST=127.0.0.1
   POSTGRES_PORT=5432
