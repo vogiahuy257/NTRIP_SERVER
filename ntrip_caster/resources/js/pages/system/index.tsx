@@ -33,6 +33,7 @@ import { cn } from '@/lib/utils';
 
 import { BottleneckDiagnosisCard } from './components/bottleneck-diagnosis-card';
 import { ObservabilityHelpButton } from './components/observability-help-button';
+import { RedisRuntimeOverview } from './components/redis-runtime-overview';
 import { RoverRealtimeDetails } from './components/rover-realtime-details';
 import { RtcmFlowSecondaryCharts } from './components/rtcm-flow-secondary-charts';
 import { SystemStatusOverview } from './components/system-status-overview';
@@ -186,6 +187,11 @@ export default function SystemIndex() {
                                 loading={isSystemStatusInitialLoading}
                                 refreshing={isSystemStatusRefreshing}
                                 onRefresh={refreshSystemStatus}
+                            />
+
+                            <RedisRuntimeOverview
+                                redis={systemStatus?.redis ?? null}
+                                loading={isSystemStatusInitialLoading}
                             />
 
                             <section className="ntrip-section grid min-w-0 grid-cols-1 gap-3 rounded-2xl p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[minmax(12rem,1fr)_minmax(10rem,0.65fr)_minmax(10rem,0.65fr)_auto]">
