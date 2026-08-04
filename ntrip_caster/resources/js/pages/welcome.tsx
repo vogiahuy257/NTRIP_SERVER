@@ -8,17 +8,16 @@ import {
     MousePointer2,
     Network,
     RadioTower,
-    Satellite,
     ServerCog,
     ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 
-import {
-    WelcomeThreeScene,
-} from '@/components/welcome-3d/welcome-three-scene';
 import type { WelcomeSceneNode } from '@/components/welcome-3d/welcome-model-assets';
+import { WelcomeThreeScene } from '@/components/welcome-3d/welcome-three-scene';
 import { dashboard, login, register } from '@/routes';
+
+const NODE_ORDER: WelcomeSceneNode[] = ['base', 'caster', 'uav', 'rover'];
 
 const NODE_CONTENT: Record<
     WelcomeSceneNode,
@@ -98,6 +97,12 @@ const CAPABILITIES = [
     },
 ] as const;
 
+const NAVIGATION = [
+    ['Architecture', 'architecture'],
+    ['Capabilities', 'capabilities'],
+    ['Platform', 'platform'],
+] as const;
+
 function scrollToSection(id: string): void {
     document.getElementById(id)?.scrollIntoView({
         behavior: 'smooth',
@@ -119,14 +124,15 @@ export default function Welcome() {
                 />
             </Head>
 
-            <div className="relative min-h-screen overflow-x-clip bg-[#f7f7f3] text-[#11110f] selection:bg-black selection:text-white">
+            <div className="relative isolate min-h-screen overflow-x-clip bg-[#f7f7f3] text-[#11110f] selection:bg-black selection:text-white">
                 <div
                     aria-hidden="true"
-                    className="pointer-events-none fixed inset-0 z-0 opacity-55"
+                    className="pointer-events-none fixed inset-0 -z-10 opacity-50"
                     style={{
                         backgroundImage:
                             'linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px)',
-                        backgroundSize: '64px 64px',
+                        backgroundSize:
+                            'clamp(2.5rem, 8vw, 4rem) clamp(2.5rem, 8vw, 4rem)',
                         maskImage:
                             'linear-gradient(to bottom, black, transparent 88%)',
                     }}
@@ -135,69 +141,83 @@ export default function Welcome() {
                 <WelcomeThreeScene
                     activeNode={activeNode}
                     onActiveNodeChange={setActiveNode}
-                    className="fixed inset-0 z-[1]"
+                    className="fixed inset-x-0 top-[4.75rem] z-0 h-[42svh] min-h-64 sm:top-20 sm:h-[48svh] md:h-[52svh] lg:inset-0 lg:h-auto lg:min-h-0"
                 />
 
-                <header className="fixed top-0 right-0 left-0 z-40 px-3 pt-3 sm:px-5 sm:pt-4">
-                    <nav className="mx-auto flex h-14 max-w-[1440px] items-center justify-between rounded-2xl border border-black/[0.08] bg-white/70 px-3 shadow-[0_20px_60px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:h-16 sm:px-4">
+                <div
+                    aria-hidden="true"
+                    className="pointer-events-none fixed inset-x-0 top-[4.75rem] z-[2] h-[42svh] bg-gradient-to-b from-transparent via-transparent to-[#f7f7f3] sm:top-20 sm:h-[48svh] md:h-[52svh] lg:hidden"
+                />
+
+                <header className="fixed inset-x-0 top-0 z-40 px-2.5 pt-2.5 sm:px-4 sm:pt-4">
+                    <nav className="mx-auto flex min-h-14 max-w-[1440px] items-center justify-between gap-2 rounded-2xl border border-black/[0.08] bg-white/78 px-2.5 shadow-[0_18px_54px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:min-h-16 sm:px-4">
                         <button
                             type="button"
                             onClick={() => scrollToSection('hero')}
-                            className="flex items-center gap-3 rounded-xl text-left focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none"
+                            className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl text-left focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:gap-3"
                         >
-                            <span className="grid size-9 place-items-center rounded-xl bg-black text-white sm:size-10">
-                                <RadioTower className="size-4.5" strokeWidth={1.8} />
+                            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-black text-white sm:size-10">
+                                <RadioTower
+                                    className="size-4 sm:size-[1.125rem]"
+                                    strokeWidth={1.8}
+                                />
                             </span>
 
-                            <span>
-                                <span className="block text-sm leading-none font-bold tracking-[-0.025em]">
+                            <span className="min-w-0">
+                                <span className="block truncate text-[13px] leading-none font-bold tracking-[-0.025em] sm:text-sm">
                                     NTRIP Caster
                                 </span>
-                                <span className="mt-1 hidden text-[11px] leading-none text-black/45 sm:block">
+                                <span className="mt-1 hidden truncate text-[11px] leading-none text-black/45 sm:block">
                                     GNSS correction infrastructure
                                 </span>
                             </span>
                         </button>
 
                         <div className="hidden items-center gap-1 lg:flex">
-                            {[
-                                ['Architecture', 'architecture'],
-                                ['Capabilities', 'capabilities'],
-                                ['Platform', 'platform'],
-                            ].map(([label, id]) => (
+                            {NAVIGATION.map(([label, id]) => (
                                 <button
                                     key={id}
                                     type="button"
                                     onClick={() => scrollToSection(id)}
-                                    className="rounded-xl px-3 py-2 text-xs font-semibold text-black/55 transition hover:bg-black/[0.05] hover:text-black"
+                                    className="min-h-10 rounded-xl px-3 text-xs font-semibold text-black/55 transition hover:bg-black/[0.05] hover:text-black focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:outline-none"
                                 >
                                     {label}
                                 </button>
                             ))}
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                             {auth.user ? (
                                 <Link
                                     href={dashboard()}
-                                    className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-black px-3.5 text-xs font-semibold text-white transition hover:bg-black/[0.82]"
+                                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black px-3 text-xs font-semibold text-white transition hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4"
                                 >
-                                    Dashboard
+                                    <span className="hidden min-[360px]:inline">
+                                        Dashboard
+                                    </span>
+                                    <span className="min-[360px]:hidden">
+                                        Open
+                                    </span>
                                     <ArrowRight className="size-3.5" />
                                 </Link>
                             ) : (
                                 <>
                                     <Link
                                         href={login()}
-                                        className="hidden min-h-9 items-center rounded-xl px-3 text-xs font-semibold text-black/60 transition hover:bg-black/[0.05] hover:text-black sm:inline-flex"
+                                        className="hidden min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-black/60 transition hover:bg-black/[0.05] hover:text-black sm:inline-flex"
                                     >
                                         Log in
                                     </Link>
                                     <Link
                                         href={register()}
-                                        className="inline-flex min-h-9 items-center gap-2 rounded-xl bg-black px-3.5 text-xs font-semibold text-white transition hover:bg-black/[0.82]"
+                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black px-3 text-xs font-semibold text-white transition hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4"
                                     >
-                                        Get started
+                                        <span className="hidden min-[360px]:inline">
+                                            Get started
+                                        </span>
+                                        <span className="min-[360px]:hidden">
+                                            Start
+                                        </span>
                                         <ArrowRight className="size-3.5" />
                                     </Link>
                                 </>
@@ -206,110 +226,156 @@ export default function Welcome() {
                     </nav>
                 </header>
 
-                <main className="pointer-events-none relative z-10">
+                <main className="relative z-10">
                     <section
                         id="hero"
-                        className="mx-auto grid min-h-[100svh] max-w-[1440px] items-center px-5 pt-28 pb-16 sm:px-8 lg:grid-cols-[minmax(0,0.82fr)_minmax(28rem,1.18fr)] lg:px-10"
+                        className="mx-auto flex min-h-[100svh] max-w-[1440px] scroll-mt-20 flex-col justify-end px-4 pt-[calc(42svh+6.5rem)] pb-10 sm:px-6 sm:pt-[calc(48svh+7rem)] sm:pb-14 md:px-8 md:pt-[calc(52svh+7rem)] lg:grid lg:grid-cols-[minmax(0,0.82fr)_minmax(30rem,1.18fr)] lg:items-center lg:px-10 lg:pt-28 lg:pb-20"
                     >
-                        <div className="pointer-events-auto max-w-2xl lg:pb-10">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-3 py-2 text-[11px] font-semibold tracking-[0.12em] text-black/55 uppercase backdrop-blur-xl">
+                        <div className="max-w-2xl rounded-[1.5rem] border border-black/[0.07] bg-white/84 p-4 shadow-[0_24px_75px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-6 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                            <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-black/55 uppercase backdrop-blur-xl sm:text-[11px]">
                                 <span className="size-1.5 rounded-full bg-black" />
                                 Realtime GNSS infrastructure
                             </div>
 
-                            <h1 className="mt-6 max-w-[12ch] text-[clamp(3rem,7vw,7.2rem)] leading-[0.88] font-semibold tracking-[-0.07em] text-black">
+                            <h1 className="mt-5 max-w-[12ch] text-[clamp(2.45rem,11.5vw,4.75rem)] leading-[0.92] font-semibold tracking-[-0.065em] text-black sm:mt-6 sm:text-[clamp(3.5rem,9vw,5.5rem)] lg:text-[clamp(4.75rem,7vw,7rem)]">
                                 Precision correction.
                                 <span className="block text-black/35">
                                     Delivered everywhere.
                                 </span>
                             </h1>
 
-                            <p className="mt-7 max-w-xl text-[clamp(1rem,1.6vw,1.25rem)] leading-7 text-black/55">
+                            <p className="mt-5 max-w-xl text-sm leading-6 text-black/55 sm:mt-6 sm:text-base sm:leading-7 lg:text-lg lg:leading-8">
                                 Manage RTK base stations, RTCM streams,
                                 mountpoints, UAVs and autonomous rovers from one
-                                production-ready control plane.
+                                realtime platform.
                             </p>
 
-                            <div className="mt-8 flex flex-wrap gap-3">
+                            <div className="mt-6 grid gap-2 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:gap-3">
                                 <Link
-                                    href={auth.user ? dashboard() : login()}
-                                    className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-black px-5 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:bg-black/84"
+                                    href={auth.user ? dashboard() : register()}
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-black px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none"
                                 >
-                                    {auth.user ? 'Open dashboard' : 'Open platform'}
+                                    {auth.user
+                                        ? 'Open dashboard'
+                                        : 'Get started'}
                                     <ArrowRight className="size-4" />
                                 </Link>
 
                                 <button
                                     type="button"
-                                    onClick={() => scrollToSection('architecture')}
-                                    className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-black/10 bg-white/72 px-5 text-sm font-semibold text-black backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white"
+                                    onClick={() =>
+                                        scrollToSection('architecture')
+                                    }
+                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white/72 px-5 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:outline-none"
                                 >
-                                    Explore the network
+                                    Explore network
                                     <ArrowDown className="size-4" />
                                 </button>
                             </div>
 
-                            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs font-medium text-black/40">
-                                <span>Realtime RTCM</span>
-                                <span className="size-1 rounded-full bg-black/20" />
-                                <span>WebSocket telemetry</span>
-                                <span className="size-1 rounded-full bg-black/20" />
-                                <span>Redis-backed runtime</span>
+                            <div className="mt-5 grid grid-cols-3 gap-1.5 sm:max-w-xl sm:gap-2">
+                                {[
+                                    ['RTCM', 'Realtime'],
+                                    ['Redis', 'Runtime'],
+                                    ['RTK', 'Ready'],
+                                ].map(([value, label]) => (
+                                    <div
+                                        key={value}
+                                        className="min-w-0 rounded-xl border border-black/[0.07] bg-white/58 px-2.5 py-2.5 sm:rounded-2xl sm:px-3 sm:py-3"
+                                    >
+                                        <p className="truncate text-xs font-semibold sm:text-sm">
+                                            {value}
+                                        </p>
+                                        <p className="mt-0.5 truncate text-[10px] text-black/42 sm:text-[11px]">
+                                            {label}
+                                        </p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 
-                        <div className="pointer-events-none min-h-[44svh] lg:min-h-0" />
+                        <div className="hidden lg:block" aria-hidden="true" />
+                    </section>
 
-                        <div className="pointer-events-auto absolute right-5 bottom-6 left-5 sm:right-8 sm:left-auto sm:w-[22rem] lg:right-10 lg:bottom-10">
-                            <div className="rounded-2xl border border-black/[0.08] bg-white/72 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.1)] backdrop-blur-2xl">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p className="text-[10px] font-bold tracking-[0.14em] text-black/38 uppercase">
-                                            Interactive scene
-                                        </p>
-                                        <p className="mt-1 text-sm font-semibold">
-                                            {activeContent.label}
-                                        </p>
-                                    </div>
-
-                                    <span className="rounded-full border border-black/10 px-2 py-1 text-[10px] font-bold text-black/48">
-                                        {activeContent.index}
-                                    </span>
+                    <section
+                        aria-label="Interactive network controls"
+                        className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6 md:px-8 lg:px-10 lg:pb-24"
+                    >
+                        <div className="rounded-[1.5rem] border border-black/[0.08] bg-white/86 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-4 lg:ml-auto lg:max-w-xl">
+                            <div className="flex items-start justify-between gap-3 px-1 pb-3">
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-bold tracking-[0.14em] text-black/38 uppercase">
+                                        Interactive scene
+                                    </p>
+                                    <p className="mt-1 truncate text-sm font-semibold">
+                                        {activeContent.label}
+                                    </p>
                                 </div>
 
-                                <p className="mt-3 text-xs leading-5 text-black/52">
-                                    Drag with the mouse to rotate. Hover or click
-                                    a model to inspect it. Scroll to move the
-                                    camera through the network.
-                                </p>
+                                <span className="shrink-0 rounded-full border border-black/10 px-2 py-1 text-[10px] font-bold text-black/48">
+                                    {activeContent.index}
+                                </span>
+                            </div>
 
-                                <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold text-black/48">
-                                    <MousePointer2 className="size-3.5" />
-                                    Mouse interaction enabled
-                                </div>
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                {NODE_ORDER.map((node) => {
+                                    const content = NODE_CONTENT[node];
+                                    const selected = node === activeNode;
+
+                                    return (
+                                        <button
+                                            key={node}
+                                            type="button"
+                                            aria-pressed={selected}
+                                            onClick={() => setActiveNode(node)}
+                                            className={`min-h-11 rounded-xl border px-2.5 py-2 text-left text-[11px] font-semibold transition focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:min-h-12 sm:text-xs ${
+                                                selected
+                                                    ? 'border-black bg-black text-white'
+                                                    : 'border-black/[0.07] bg-white/62 text-black/58 hover:border-black/15 hover:bg-white hover:text-black'
+                                            }`}
+                                        >
+                                            <span className="block text-[9px] opacity-55 sm:text-[10px]">
+                                                {content.index}
+                                            </span>
+                                            <span className="mt-0.5 block truncate">
+                                                {content.label}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <p className="mt-3 text-xs leading-5 text-black/50">
+                                {activeContent.description}
+                            </p>
+
+                            <div className="mt-3 hidden items-center gap-2 text-[11px] font-semibold text-black/45 sm:flex">
+                                <MousePointer2 className="size-3.5" />
+                                Drag to rotate · Hover or click to inspect ·
+                                Scroll to move the camera
                             </div>
                         </div>
                     </section>
 
                     <section
                         id="architecture"
-                        className="mx-auto flex min-h-[115svh] max-w-[1440px] items-center px-5 py-24 sm:px-8 lg:px-10"
+                        className="mx-auto flex max-w-[1440px] scroll-mt-20 items-center px-4 py-16 sm:min-h-[100svh] sm:px-6 sm:py-20 md:px-8 lg:min-h-[115svh] lg:px-10"
                     >
-                        <div className="pointer-events-auto ml-auto w-full max-w-xl rounded-[2rem] border border-black/[0.08] bg-white/78 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:p-8">
-                            <p className="text-[11px] font-bold tracking-[0.16em] text-black/38 uppercase">
+                        <div className="ml-auto w-full rounded-[1.5rem] border border-black/[0.08] bg-white/90 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:max-w-xl sm:rounded-[2rem] sm:p-7 lg:p-8">
+                            <p className="text-[10px] font-bold tracking-[0.16em] text-black/38 uppercase sm:text-[11px]">
                                 Architecture
                             </p>
-                            <h2 className="mt-3 max-w-[13ch] text-4xl leading-[0.95] font-semibold tracking-[-0.055em] sm:text-6xl">
+                            <h2 className="mt-3 max-w-[13ch] text-[clamp(2.25rem,10vw,4rem)] leading-[0.96] font-semibold tracking-[-0.055em] sm:text-5xl lg:text-6xl">
                                 From source to RTK Fixed.
                             </h2>
-                            <p className="mt-5 max-w-lg text-sm leading-6 text-black/52 sm:text-base sm:leading-7">
+                            <p className="mt-4 max-w-lg text-sm leading-6 text-black/52 sm:mt-5 sm:text-base sm:leading-7">
                                 One continuous correction path connects field
                                 infrastructure to autonomous clients while every
                                 stream remains observable.
                             </p>
 
-                            <div className="mt-7 grid gap-2">
-                                {INTERACTIVE_NODE_ORDER.map((node) => {
+                            <div className="mt-6 grid gap-2 sm:mt-7">
+                                {NODE_ORDER.map((node) => {
                                     const content = NODE_CONTENT[node];
                                     const selected = activeNode === node;
 
@@ -317,15 +383,16 @@ export default function Welcome() {
                                         <button
                                             key={node}
                                             type="button"
+                                            aria-pressed={selected}
                                             onClick={() => setActiveNode(node)}
-                                            className={`group grid grid-cols-[2.4rem_1fr_auto] items-center gap-3 rounded-2xl border px-3 py-3 text-left transition sm:px-4 ${
+                                            className={`group grid min-h-14 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:px-4 sm:py-3 ${
                                                 selected
                                                     ? 'border-black/12 bg-black text-white shadow-[0_14px_30px_rgba(0,0,0,0.14)]'
-                                                    : 'border-black/[0.07] bg-white/58 hover:border-black/12 hover:bg-white'
+                                                    : 'border-black/[0.07] bg-white/62 hover:border-black/12 hover:bg-white'
                                             }`}
                                         >
                                             <span
-                                                className={`grid size-9 place-items-center rounded-xl text-xs font-bold ${
+                                                className={`grid size-9 place-items-center rounded-xl text-xs font-bold sm:size-10 ${
                                                     selected
                                                         ? 'bg-white/12 text-white'
                                                         : 'bg-black/[0.05] text-black/45'
@@ -335,11 +402,11 @@ export default function Welcome() {
                                             </span>
 
                                             <span className="min-w-0">
-                                                <span className="block truncate text-sm font-semibold">
+                                                <span className="block truncate text-xs font-semibold sm:text-sm">
                                                     {content.label}
                                                 </span>
                                                 <span
-                                                    className={`mt-0.5 block truncate text-xs ${
+                                                    className={`mt-0.5 block overflow-hidden text-[10px] leading-4 sm:text-xs ${
                                                         selected
                                                             ? 'text-white/55'
                                                             : 'text-black/42'
@@ -350,7 +417,7 @@ export default function Welcome() {
                                             </span>
 
                                             <ArrowRight
-                                                className={`size-4 transition group-hover:translate-x-0.5 ${
+                                                className={`size-4 shrink-0 transition group-hover:translate-x-0.5 ${
                                                     selected
                                                         ? 'text-white/65'
                                                         : 'text-black/28'
@@ -365,39 +432,44 @@ export default function Welcome() {
 
                     <section
                         id="capabilities"
-                        className="mx-auto min-h-[115svh] max-w-[1440px] px-5 py-24 sm:px-8 lg:px-10"
+                        className="mx-auto max-w-[1440px] scroll-mt-20 px-4 py-16 sm:px-6 sm:py-20 md:px-8 lg:min-h-[110svh] lg:px-10 lg:py-24"
                     >
-                        <div className="pointer-events-auto max-w-3xl rounded-[2rem] border border-black/[0.08] bg-white/80 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:p-8">
-                            <p className="text-[11px] font-bold tracking-[0.16em] text-black/38 uppercase">
+                        <div className="max-w-4xl rounded-[1.5rem] border border-black/[0.08] bg-white/92 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:rounded-[2rem] sm:p-7 lg:p-8">
+                            <p className="text-[10px] font-bold tracking-[0.16em] text-black/38 uppercase sm:text-[11px]">
                                 Core capabilities
                             </p>
-                            <div className="mt-3 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-                                <h2 className="max-w-[11ch] text-4xl leading-[0.95] font-semibold tracking-[-0.055em] sm:text-6xl">
+
+                            <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] md:items-end md:gap-8">
+                                <h2 className="max-w-[12ch] text-[clamp(2.25rem,10vw,4rem)] leading-[0.96] font-semibold tracking-[-0.055em] sm:text-5xl lg:text-6xl">
                                     Built for live correction networks.
                                 </h2>
-                                <p className="max-w-sm text-sm leading-6 text-black/50">
-                                    The welcome scene is procedural today and
-                                    ready to receive your real ZD550 UAV, RTK
-                                    base and rover GLB models later.
+                                <p className="text-sm leading-6 text-black/50 sm:text-base sm:leading-7">
+                                    The production scene already supports your
+                                    real ZD550 UAV and RTK base GLB files. The
+                                    Caster and Rover remain lightweight
+                                    procedural models.
                                 </p>
                             </div>
 
-                            <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="mt-7 grid gap-2.5 sm:mt-8 sm:grid-cols-2 lg:grid-cols-3">
                                 {CAPABILITIES.map((capability) => {
                                     const Icon = capability.icon;
 
                                     return (
                                         <article
                                             key={capability.title}
-                                            className="rounded-2xl border border-black/[0.07] bg-white/62 p-4 transition hover:-translate-y-0.5 hover:border-black/12 hover:bg-white"
+                                            className="rounded-2xl border border-black/[0.07] bg-white/68 p-4 transition hover:-translate-y-0.5 hover:border-black/12 hover:bg-white sm:p-5"
                                         >
-                                            <span className="grid size-10 place-items-center rounded-xl bg-black text-white">
-                                                <Icon className="size-4.5" strokeWidth={1.8} />
+                                            <span className="grid size-10 place-items-center rounded-xl bg-black text-white sm:size-11">
+                                                <Icon
+                                                    className="size-4 sm:size-[1.125rem]"
+                                                    strokeWidth={1.8}
+                                                />
                                             </span>
-                                            <h3 className="mt-5 text-sm font-semibold">
+                                            <h3 className="mt-4 text-sm font-semibold sm:mt-5">
                                                 {capability.title}
                                             </h3>
-                                            <p className="mt-2 text-xs leading-5 text-black/48">
+                                            <p className="mt-2 text-xs leading-5 text-black/48 sm:text-[13px] sm:leading-5">
                                                 {capability.description}
                                             </p>
                                         </article>
@@ -409,19 +481,19 @@ export default function Welcome() {
 
                     <section
                         id="platform"
-                        className="mx-auto flex min-h-[100svh] max-w-[1440px] items-end px-5 py-10 sm:px-8 lg:px-10 lg:py-14"
+                        className="mx-auto flex max-w-[1440px] scroll-mt-20 items-end px-4 py-10 sm:min-h-[90svh] sm:px-6 sm:py-14 md:px-8 lg:min-h-[100svh] lg:px-10"
                     >
-                        <div className="pointer-events-auto w-full overflow-hidden rounded-[2rem] border border-black/[0.08] bg-black text-white shadow-[0_35px_110px_rgba(0,0,0,0.22)]">
-                            <div className="grid gap-8 p-6 sm:p-10 lg:grid-cols-[1fr_auto] lg:items-end lg:p-14">
+                        <div className="w-full overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-black text-white shadow-[0_35px_110px_rgba(0,0,0,0.22)] sm:rounded-[2rem]">
+                            <div className="grid gap-7 p-5 sm:p-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:p-14">
                                 <div>
-                                    <div className="flex items-center gap-2 text-[11px] font-bold tracking-[0.16em] text-white/45 uppercase">
+                                    <div className="flex items-center gap-2 text-[10px] font-bold tracking-[0.16em] text-white/45 uppercase sm:text-[11px]">
                                         <ServerCog className="size-4" />
                                         Production-ready foundation
                                     </div>
-                                    <h2 className="mt-4 max-w-[13ch] text-4xl leading-[0.95] font-semibold tracking-[-0.055em] sm:text-6xl">
+                                    <h2 className="mt-4 max-w-[13ch] text-[clamp(2.25rem,10vw,4rem)] leading-[0.96] font-semibold tracking-[-0.055em] sm:text-5xl lg:text-6xl">
                                         Build your precision network.
                                     </h2>
-                                    <p className="mt-5 max-w-2xl text-sm leading-6 text-white/55 sm:text-base sm:leading-7">
+                                    <p className="mt-4 max-w-2xl text-sm leading-6 text-white/55 sm:mt-5 sm:text-base sm:leading-7">
                                         Laravel, React, PostgreSQL, Redis,
                                         Reverb and the NTRIP TCP service work as
                                         one operational platform.
@@ -430,7 +502,7 @@ export default function Welcome() {
 
                                 <Link
                                     href={auth.user ? dashboard() : register()}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-white/90"
+                                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black focus-visible:outline-none sm:w-auto"
                                 >
                                     {auth.user
                                         ? 'Open dashboard'
@@ -441,13 +513,25 @@ export default function Welcome() {
 
                             <div className="grid border-t border-white/10 sm:grid-cols-3">
                                 {[
-                                    ['01', 'Base stations', 'RTCM source layer'],
-                                    ['02', 'Caster runtime', 'Realtime control plane'],
-                                    ['03', 'UAV and rover', 'Precision client layer'],
+                                    [
+                                        '01',
+                                        'Base stations',
+                                        'RTCM source layer',
+                                    ],
+                                    [
+                                        '02',
+                                        'Caster runtime',
+                                        'Realtime control plane',
+                                    ],
+                                    [
+                                        '03',
+                                        'UAV and rover',
+                                        'Precision client layer',
+                                    ],
                                 ].map(([index, title, description]) => (
                                     <div
                                         key={index}
-                                        className="border-white/10 p-5 sm:border-r sm:last:border-r-0 sm:p-6"
+                                        className="border-b border-white/10 p-5 last:border-b-0 sm:border-r sm:border-b-0 sm:p-6 sm:last:border-r-0"
                                     >
                                         <span className="text-[10px] font-bold tracking-[0.14em] text-white/30">
                                             {index}
@@ -463,19 +547,19 @@ export default function Welcome() {
                             </div>
                         </div>
                     </section>
+
+                    <footer className="mx-auto max-w-[1440px] px-4 pb-6 sm:px-6 sm:pb-8 md:px-8 lg:px-10">
+                        <div className="flex flex-col gap-3 border-t border-black/[0.08] py-5 text-xs text-black/42 sm:flex-row sm:items-center sm:justify-between">
+                            <p>NTRIP Caster · Realtime GNSS infrastructure</p>
+                            <p>Base → Caster → UAV / Rover</p>
+                        </div>
+                    </footer>
                 </main>
 
-                <div className="pointer-events-none fixed right-3 bottom-3 z-30 hidden rounded-full border border-black/10 bg-white/68 px-3 py-2 text-[10px] font-semibold text-black/42 backdrop-blur-xl sm:block">
+                <div className="pointer-events-none fixed right-4 bottom-4 z-30 hidden rounded-full border border-black/10 bg-white/72 px-3 py-2 text-[10px] font-semibold text-black/42 backdrop-blur-xl lg:block">
                     Scroll to move · Drag to rotate · Click to inspect
                 </div>
             </div>
         </>
     );
 }
-
-const INTERACTIVE_NODE_ORDER: WelcomeSceneNode[] = [
-    'base',
-    'caster',
-    'uav',
-    'rover',
-];

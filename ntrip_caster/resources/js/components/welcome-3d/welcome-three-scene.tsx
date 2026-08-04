@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import {
-    GLTFLoader,
-    type GLTF,
-} from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 
-import {
-    WELCOME_MODEL_ASSETS,
-    type WelcomeReplaceableModelNode,
-    type WelcomeSceneNode,
+import { WELCOME_MODEL_ASSETS } from './welcome-model-assets';
+import type {
+    WelcomeReplaceableModelNode,
+    WelcomeSceneNode,
 } from './welcome-model-assets';
 
 type WelcomeThreeSceneProps = {
@@ -38,6 +36,42 @@ const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
     rover: new THREE.Vector3(4.15, -0.3, 2.25),
 };
 
+type ResponsiveSceneProfile = {
+    cameraPoints: THREE.Vector3[];
+    worldScale: number;
+    worldY: number;
+    maxPixelRatio: number;
+    baseFov: number;
+    pointerInfluence: number;
+    particleLimit: number;
+    showGrid: boolean;
+    shadowMapSize: number;
+};
+
+const CAMERA_COMPACT = [
+    new THREE.Vector3(8.8, 6.3, 20.5),
+    new THREE.Vector3(-0.2, 5.1, 17.4),
+    new THREE.Vector3(0.5, 7.8, 18.2),
+    new THREE.Vector3(8.1, 5.8, 16.8),
+    new THREE.Vector3(0.5, 9.6, 21.5),
+];
+
+const CAMERA_MOBILE = [
+    new THREE.Vector3(8.8, 5.9, 17.5),
+    new THREE.Vector3(-0.5, 4.5, 14.4),
+    new THREE.Vector3(0.4, 7.0, 15.4),
+    new THREE.Vector3(7.9, 5.0, 13.8),
+    new THREE.Vector3(0.4, 8.9, 18.6),
+];
+
+const CAMERA_TABLET = [
+    new THREE.Vector3(8.6, 5.2, 14.6),
+    new THREE.Vector3(-1.2, 3.8, 11.1),
+    new THREE.Vector3(0.3, 6.2, 12.2),
+    new THREE.Vector3(7.6, 4.2, 10.4),
+    new THREE.Vector3(0.4, 8.0, 15.8),
+];
+
 const CAMERA_DESKTOP = [
     new THREE.Vector3(8.4, 4.8, 12.8),
     new THREE.Vector3(-1.8, 3.2, 9.2),
@@ -46,13 +80,61 @@ const CAMERA_DESKTOP = [
     new THREE.Vector3(0.4, 7.6, 14.2),
 ];
 
-const CAMERA_MOBILE = [
-    new THREE.Vector3(8.9, 5.7, 15.5),
-    new THREE.Vector3(0.2, 4.4, 12.8),
-    new THREE.Vector3(0.4, 6.8, 13.9),
-    new THREE.Vector3(7.8, 4.8, 12.2),
-    new THREE.Vector3(0.4, 8.8, 17.4),
-];
+function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
+    if (width < 480) {
+        return {
+            cameraPoints: CAMERA_COMPACT,
+            worldScale: 0.68,
+            worldY: -0.78,
+            maxPixelRatio: 1.15,
+            baseFov: 42,
+            pointerInfluence: 0,
+            particleLimit: 2,
+            showGrid: false,
+            shadowMapSize: 768,
+        };
+    }
+
+    if (width < 768) {
+        return {
+            cameraPoints: CAMERA_MOBILE,
+            worldScale: 0.8,
+            worldY: -0.58,
+            maxPixelRatio: 1.4,
+            baseFov: 39,
+            pointerInfluence: 0,
+            particleLimit: 3,
+            showGrid: true,
+            shadowMapSize: 1024,
+        };
+    }
+
+    if (width < 1024) {
+        return {
+            cameraPoints: CAMERA_TABLET,
+            worldScale: 0.92,
+            worldY: -0.36,
+            maxPixelRatio: 1.65,
+            baseFov: 37,
+            pointerInfluence: 0.55,
+            particleLimit: 4,
+            showGrid: true,
+            shadowMapSize: 1024,
+        };
+    }
+
+    return {
+        cameraPoints: CAMERA_DESKTOP,
+        worldScale: 1,
+        worldY: -0.2,
+        maxPixelRatio: 2,
+        baseFov: 35,
+        pointerInfluence: 1,
+        particleLimit: 5,
+        showGrid: true,
+        shadowMapSize: 1536,
+    };
+}
 
 const CAMERA_TARGETS = [
     new THREE.Vector3(0.4, 0.35, 0.2),
@@ -117,12 +199,7 @@ function createBaseStation(): THREE.Group {
         metalness: 0.06,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(0.9, 0.55, 0.7),
-        dark,
-        [0, 1.35, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(0.9, 0.55, 0.7), dark, [0, 1.35, 0]);
     addMesh(
         group,
         new THREE.CylinderGeometry(0.11, 0.13, 1.35, 20),
@@ -175,34 +252,22 @@ function createCasterServer(): THREE.Group {
         emissiveIntensity: 0.22,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.7, 3.25, 1.45),
-        dark,
-        [0, 1.65, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.7, 3.25, 1.45), dark, [0, 1.65, 0]);
 
     for (let index = 0; index < 6; index += 1) {
-        addMesh(
-            group,
-            new THREE.BoxGeometry(1.48, 0.28, 0.08),
-            panel,
-            [0, 0.55 + index * 0.46, 0.765],
-        );
-        addMesh(
-            group,
-            new THREE.SphereGeometry(0.045, 12, 8),
-            light,
-            [-0.55, 0.55 + index * 0.46, 0.82],
-        );
+        addMesh(group, new THREE.BoxGeometry(1.48, 0.28, 0.08), panel, [
+            0,
+            0.55 + index * 0.46,
+            0.765,
+        ]);
+        addMesh(group, new THREE.SphereGeometry(0.045, 12, 8), light, [
+            -0.55,
+            0.55 + index * 0.46,
+            0.82,
+        ]);
     }
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.95, 0.16, 1.7),
-        panel,
-        [0, 0.05, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.95, 0.16, 1.7), panel, [0, 0.05, 0]);
 
     return group;
 }
@@ -224,12 +289,7 @@ function createUav(): THREE.Group {
         opacity: 0.78,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.15, 0.46, 0.85),
-        dark,
-        [0, 0.1, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.15, 0.46, 0.85), dark, [0, 0.1, 0]);
     addMesh(
         group,
         new THREE.BoxGeometry(0.72, 0.34, 0.58),
@@ -307,12 +367,7 @@ function createRover(): THREE.Group {
     });
     const white = createStandardMaterial(0xe9e9e6);
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(2.2, 0.65, 1.35),
-        dark,
-        [0, 0.58, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(2.2, 0.65, 1.35), dark, [0, 0.58, 0]);
     addMesh(
         group,
         new THREE.BoxGeometry(1.25, 0.48, 1.0),
@@ -548,21 +603,30 @@ export function WelcomeThreeScene({
         }
 
         let renderer: THREE.WebGLRenderer;
+        const initialProfile = getResponsiveSceneProfile(
+            Math.max(container.clientWidth, 1),
+        );
 
         try {
             renderer = new THREE.WebGLRenderer({
-                antialias: true,
+                antialias: container.clientWidth >= 480,
                 alpha: true,
                 powerPreference: 'high-performance',
             });
         } catch (error) {
-            console.error('Unable to initialize the Welcome WebGL scene.', error);
-            setWebGlAvailable(false);
+            console.error(
+                'Unable to initialize the Welcome WebGL scene.',
+                error,
+            );
 
-            return;
+            const fallbackTimer = window.setTimeout(() => {
+                setWebGlAvailable(false);
+            }, 0);
+
+            return () => {
+                window.clearTimeout(fallbackTimer);
+            };
         }
-
-        setWebGlAvailable(true);
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 120);
@@ -578,7 +642,9 @@ export function WelcomeThreeScene({
         const modelNodes = new Map<WelcomeSceneNode, InteractiveNode>();
         const pathRuntimes: DataPath[] = [];
         const loader = new GLTFLoader();
-        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const mediaQuery = window.matchMedia(
+            '(prefers-reduced-motion: reduce)',
+        );
 
         loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -594,13 +660,19 @@ export function WelcomeThreeScene({
         let previousPointerX = 0;
         let previousPointerY = 0;
         let dragDistance = 0;
-        let cameraCurve = new THREE.CatmullRomCurve3(CAMERA_DESKTOP);
+        let cameraCurve = new THREE.CatmullRomCurve3(
+            initialProfile.cameraPoints,
+        );
         const targetCurve = new THREE.CatmullRomCurve3(CAMERA_TARGETS);
         let reducedMotion = mediaQuery.matches;
         let pageVisible = !document.hidden;
+        let baseFov = initialProfile.baseFov;
+        let pointerInfluence = initialProfile.pointerInfluence;
 
         renderer.setClearColor(0xffffff, 0);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(
+            Math.min(window.devicePixelRatio, initialProfile.maxPixelRatio),
+        );
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -627,7 +699,10 @@ export function WelcomeThreeScene({
         const keyLight = new THREE.DirectionalLight(0xffffff, 4.1);
         keyLight.position.set(7, 10, 8);
         keyLight.castShadow = true;
-        keyLight.shadow.mapSize.set(2048, 2048);
+        keyLight.shadow.mapSize.set(
+            initialProfile.shadowMapSize,
+            initialProfile.shadowMapSize,
+        );
         keyLight.shadow.camera.near = 1;
         keyLight.shadow.camera.far = 35;
         keyLight.shadow.camera.left = -12;
@@ -676,25 +751,37 @@ export function WelcomeThreeScene({
         const connections = [
             createPath(
                 [
-                    NODE_POSITIONS.base.clone().add(new THREE.Vector3(0, 1.15, 0)),
+                    NODE_POSITIONS.base
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.15, 0)),
                     new THREE.Vector3(-2.4, 2.0, -0.8),
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.6, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.6, 0)),
                 ],
                 0.11,
             ),
             createPath(
                 [
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.65, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.65, 0)),
                     new THREE.Vector3(2.0, 2.6, -1.0),
-                    NODE_POSITIONS.uav.clone().add(new THREE.Vector3(0, 0.1, 0)),
+                    NODE_POSITIONS.uav
+                        .clone()
+                        .add(new THREE.Vector3(0, 0.1, 0)),
                 ],
                 0.14,
             ),
             createPath(
                 [
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.4, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.4, 0)),
                     new THREE.Vector3(2.0, 1.45, 1.25),
-                    NODE_POSITIONS.rover.clone().add(new THREE.Vector3(0, 1.0, 0)),
+                    NODE_POSITIONS.rover
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.0, 0)),
                 ],
                 0.09,
             ),
@@ -702,13 +789,13 @@ export function WelcomeThreeScene({
 
         for (const connection of connections) {
             world.add(connection.mesh);
-            connection.runtime.particles.forEach((particle) => world.add(particle));
+            connection.runtime.particles.forEach((particle) =>
+                world.add(particle),
+            );
             pathRuntimes.push(connection.runtime);
         }
 
-        const loadRealModel = (
-            id: WelcomeReplaceableModelNode,
-        ): void => {
+        const loadRealModel = (id: WelcomeReplaceableModelNode): void => {
             const asset = WELCOME_MODEL_ASSETS[id];
 
             if (!asset.url) {
@@ -732,9 +819,7 @@ export function WelcomeThreeScene({
 
                     const model = gltf.scene;
                     normalizeLoadedModel(model, asset.targetSize);
-                    model.position.add(
-                        new THREE.Vector3(...asset.position),
-                    );
+                    model.position.add(new THREE.Vector3(...asset.position));
                     model.rotation.set(...asset.rotation);
                     model.scale.multiplyScalar(asset.scale);
                     model.traverse((child: THREE.Object3D) => {
@@ -778,17 +863,35 @@ export function WelcomeThreeScene({
         const updateSize = (): void => {
             const width = Math.max(container.clientWidth, 1);
             const height = Math.max(container.clientHeight, 1);
-            const mobile = width < 768;
+            const profile = getResponsiveSceneProfile(width);
 
             camera.aspect = width / height;
             camera.updateProjectionMatrix();
-            cameraCurve = new THREE.CatmullRomCurve3(
-                mobile ? CAMERA_MOBILE : CAMERA_DESKTOP,
-            );
-            world.scale.setScalar(mobile ? 0.86 : 1);
-            world.position.y = mobile ? -0.55 : -0.2;
+
+            cameraCurve = new THREE.CatmullRomCurve3(profile.cameraPoints);
+            baseFov = profile.baseFov;
+            pointerInfluence = profile.pointerInfluence;
+
+            world.scale.setScalar(profile.worldScale);
+            world.position.set(0, profile.worldY, 0);
+            grid.visible = profile.showGrid;
+
+            if (keyLight.shadow.mapSize.x !== profile.shadowMapSize) {
+                keyLight.shadow.mapSize.set(
+                    profile.shadowMapSize,
+                    profile.shadowMapSize,
+                );
+                keyLight.shadow.map?.dispose();
+            }
+
+            pathRuntimes.forEach((path) => {
+                path.particles.forEach((particle, index) => {
+                    particle.visible = index < profile.particleLimit;
+                });
+            });
+
             renderer.setPixelRatio(
-                Math.min(window.devicePixelRatio, mobile ? 1.45 : 2),
+                Math.min(window.devicePixelRatio, profile.maxPixelRatio),
             );
             renderer.setSize(width, height, false);
         };
@@ -873,9 +976,14 @@ export function WelcomeThreeScene({
                 renderer.domElement.releasePointerCapture(event.pointerId);
             }
 
-            renderer.domElement.style.cursor = hoveredNode
-                ? 'pointer'
-                : 'grab';
+            renderer.domElement.style.cursor = hoveredNode ? 'pointer' : 'grab';
+        };
+
+        const handlePointerLeave = (): void => {
+            pointerTarget.set(0, 0);
+            pointer.set(3, 3);
+            hoveredNode = null;
+            renderer.domElement.style.cursor = 'grab';
         };
 
         const handleClick = (): void => {
@@ -901,13 +1009,18 @@ export function WelcomeThreeScene({
         window.addEventListener('scroll', updateScrollTarget, {
             passive: true,
         });
-        window.addEventListener('resize', updateSize);
+        const resizeObserver = new ResizeObserver(updateSize);
+        resizeObserver.observe(container);
         document.addEventListener('visibilitychange', handleVisibilityChange);
         mediaQuery.addEventListener('change', handleReducedMotionChange);
         renderer.domElement.addEventListener('pointermove', handlePointerMove);
         renderer.domElement.addEventListener('pointerdown', handlePointerDown);
         renderer.domElement.addEventListener('pointerup', endPointerDrag);
         renderer.domElement.addEventListener('pointercancel', endPointerDrag);
+        renderer.domElement.addEventListener(
+            'pointerleave',
+            handlePointerLeave,
+        );
         renderer.domElement.addEventListener('click', handleClick);
 
         updateScrollTarget();
@@ -934,31 +1047,31 @@ export function WelcomeThreeScene({
             cameraDesired.copy(cameraCurve.getPointAt(scrollCurrent));
             cameraTargetDesired.copy(targetCurve.getPointAt(scrollCurrent));
 
-            if (!reducedMotion) {
-                cameraDesired.x += pointerSmoothed.x * 0.45;
-                cameraDesired.y += pointerSmoothed.y * 0.25;
-                cameraTargetDesired.x += pointerSmoothed.x * 0.2;
+            if (!reducedMotion && pointerInfluence > 0) {
+                cameraDesired.x += pointerSmoothed.x * 0.45 * pointerInfluence;
+                cameraDesired.y += pointerSmoothed.y * 0.25 * pointerInfluence;
+                cameraTargetDesired.x +=
+                    pointerSmoothed.x * 0.2 * pointerInfluence;
             }
 
             camera.position.lerp(cameraDesired, reducedMotion ? 1 : 0.065);
-            lookAtTarget.lerp(
-                cameraTargetDesired,
-                reducedMotion ? 1 : 0.075,
-            );
+            lookAtTarget.lerp(cameraTargetDesired, reducedMotion ? 1 : 0.075);
             camera.lookAt(lookAtTarget);
 
             const zoomPulse = Math.sin(scrollCurrent * Math.PI * 2) * 1.8;
+            const desiredFov = clamp(
+                baseFov - zoomPulse,
+                baseFov - 5,
+                baseFov + 3,
+            );
             camera.fov +=
-                (clamp(35 - zoomPulse, 29, 38) - camera.fov) *
-                (reducedMotion ? 1 : 0.06);
+                (desiredFov - camera.fov) * (reducedMotion ? 1 : 0.06);
             camera.updateProjectionMatrix();
 
             world.rotation.y +=
-                (dragRotationY - world.rotation.y) *
-                (reducedMotion ? 1 : 0.08);
+                (dragRotationY - world.rotation.y) * (reducedMotion ? 1 : 0.08);
             world.rotation.x +=
-                (dragRotationX - world.rotation.x) *
-                (reducedMotion ? 1 : 0.08);
+                (dragRotationX - world.rotation.x) * (reducedMotion ? 1 : 0.08);
 
             if (!dragging) {
                 updateHoveredNode();
@@ -966,7 +1079,8 @@ export function WelcomeThreeScene({
 
             for (const node of modelNodes.values()) {
                 const emphasized =
-                    node.id === activeNodeRef.current || node.id === hoveredNode;
+                    node.id === activeNodeRef.current ||
+                    node.id === hoveredNode;
                 const targetScale = emphasized ? 1.075 : node.baseScale;
                 const nextScale = THREE.MathUtils.lerp(
                     node.slot.scale.x,
@@ -1004,7 +1118,7 @@ export function WelcomeThreeScene({
             disposed = true;
             window.cancelAnimationFrame(animationFrame);
             window.removeEventListener('scroll', updateScrollTarget);
-            window.removeEventListener('resize', updateSize);
+            resizeObserver.disconnect();
             document.removeEventListener(
                 'visibilitychange',
                 handleVisibilityChange,
@@ -1018,10 +1132,17 @@ export function WelcomeThreeScene({
                 'pointerdown',
                 handlePointerDown,
             );
-            renderer.domElement.removeEventListener('pointerup', endPointerDrag);
+            renderer.domElement.removeEventListener(
+                'pointerup',
+                endPointerDrag,
+            );
             renderer.domElement.removeEventListener(
                 'pointercancel',
                 endPointerDrag,
+            );
+            renderer.domElement.removeEventListener(
+                'pointerleave',
+                handlePointerLeave,
             );
             renderer.domElement.removeEventListener('click', handleClick);
 

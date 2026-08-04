@@ -28,14 +28,14 @@ export const WELCOME_MODEL_ASSETS: Record<
     WelcomeModelAsset
 > = {
     base: {
-        url: null,
+        url: '/models/rtk-base.glb',
         targetSize: 2.6,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,
     },
     uav: {
-        url: null,
+        url: '/models/uav-zd550.glb',
         targetSize: 3.7,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
