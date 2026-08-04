@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import {
-    GLTFLoader,
-    type GLTF,
-} from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { GLTFLoader  } from 'three/addons/loaders/GLTFLoader.js';
+import type {GLTF} from 'three/addons/loaders/GLTFLoader.js';
 
 import {
-    WELCOME_MODEL_ASSETS,
-    type WelcomeReplaceableModelNode,
-    type WelcomeSceneNode,
+    WELCOME_MODEL_ASSETS
+    
+    
 } from './welcome-model-assets';
+import type {WelcomeReplaceableModelNode, WelcomeSceneNode} from './welcome-model-assets';
 
 type WelcomeThreeSceneProps = {
     activeNode: WelcomeSceneNode;
@@ -46,6 +45,8 @@ type ResponsiveSceneProfile = {
     targetPoints: THREE.Vector3[];
     heroWorldScale: number;
     focusWorldScale: number;
+    heroWorldX: number;
+    focusWorldX: number;
     heroWorldY: number;
     focusWorldY: number;
     maxPixelRatio: number;
@@ -57,7 +58,8 @@ type ResponsiveSceneProfile = {
 };
 
 const CAMERA_COMPACT = [
-    new THREE.Vector3(10.4, 7.2, 22.5),
+    new THREE.Vector3(10.8, 7.4, 23.5),
+    new THREE.Vector3(8.9, 6.2, 18.6),
     new THREE.Vector3(-0.4, 5.0, 14.8),
     new THREE.Vector3(0.3, 4.8, 12.8),
     new THREE.Vector3(7.7, 5.5, 13.2),
@@ -66,7 +68,8 @@ const CAMERA_COMPACT = [
 ];
 
 const CAMERA_MOBILE = [
-    new THREE.Vector3(9.6, 6.6, 19.5),
+    new THREE.Vector3(10.2, 6.9, 20.8),
+    new THREE.Vector3(8.4, 5.7, 16.5),
     new THREE.Vector3(-0.8, 4.6, 12.6),
     new THREE.Vector3(0.2, 4.4, 10.9),
     new THREE.Vector3(7.3, 5.0, 11.2),
@@ -75,7 +78,8 @@ const CAMERA_MOBILE = [
 ];
 
 const CAMERA_TABLET = [
-    new THREE.Vector3(9.0, 5.9, 16.2),
+    new THREE.Vector3(9.8, 6.2, 17.8),
+    new THREE.Vector3(7.8, 5.1, 13.8),
     new THREE.Vector3(-1.1, 4.0, 10.7),
     new THREE.Vector3(0.2, 4.0, 9.3),
     new THREE.Vector3(7.1, 4.5, 9.8),
@@ -84,7 +88,8 @@ const CAMERA_TABLET = [
 ];
 
 const CAMERA_DESKTOP = [
-    new THREE.Vector3(9.4, 5.6, 17.5),
+    new THREE.Vector3(10.2, 5.9, 18.8),
+    new THREE.Vector3(8.0, 4.9, 13.8),
     new THREE.Vector3(-1.3, 3.6, 9.8),
     new THREE.Vector3(0.2, 3.8, 8.8),
     new THREE.Vector3(7.1, 4.2, 9.4),
@@ -93,11 +98,19 @@ const CAMERA_DESKTOP = [
 ];
 
 const CAMERA_TARGETS = [
-    new THREE.Vector3(0.1, 0.45, 0.3),
+    new THREE.Vector3(0.2, 0.45, 0.3),
+
+    // Camera tiến vào giữa network trước khi focus từng node.
+    new THREE.Vector3(0.2, 0.5, 0.25),
+
     NODE_POSITIONS.base.clone().add(new THREE.Vector3(0, 1.05, 0)),
+
     NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.15, 0)),
+
     NODE_POSITIONS.uav.clone().add(new THREE.Vector3(0, 0.1, 0)),
+
     NODE_POSITIONS.rover.clone().add(new THREE.Vector3(0, 0.85, 0)),
+
     new THREE.Vector3(0.25, 0.5, 0.25),
 ];
 
@@ -106,8 +119,10 @@ function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
         return {
             cameraPoints: CAMERA_COMPACT,
             targetPoints: CAMERA_TARGETS,
-            heroWorldScale: 0.54,
+            heroWorldScale: 0.46,
             focusWorldScale: 0.72,
+            heroWorldX: 0.55,
+            focusWorldX: 0,
             heroWorldY: -0.72,
             focusWorldY: -0.58,
             maxPixelRatio: 1.15,
@@ -123,8 +138,10 @@ function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
         return {
             cameraPoints: CAMERA_MOBILE,
             targetPoints: CAMERA_TARGETS,
-            heroWorldScale: 0.64,
+            heroWorldScale: 0.52,
             focusWorldScale: 0.82,
+            heroWorldX: 0.9,
+            focusWorldX: 0,
             heroWorldY: -0.58,
             focusWorldY: -0.42,
             maxPixelRatio: 1.4,
@@ -140,8 +157,10 @@ function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
         return {
             cameraPoints: CAMERA_TABLET,
             targetPoints: CAMERA_TARGETS,
-            heroWorldScale: 0.72,
+            heroWorldScale: 0.58,
             focusWorldScale: 0.92,
+            heroWorldX: 1.45,
+            focusWorldX: 0,
             heroWorldY: -0.42,
             focusWorldY: -0.3,
             maxPixelRatio: 1.65,
@@ -156,8 +175,10 @@ function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
     return {
         cameraPoints: CAMERA_DESKTOP,
         targetPoints: CAMERA_TARGETS,
-        heroWorldScale: 0.7,
+        heroWorldScale: 0.56,
         focusWorldScale: 1,
+        heroWorldX: 3.1,
+        focusWorldX: 0,
         heroWorldY: -0.3,
         focusWorldY: -0.2,
         maxPixelRatio: 2,
@@ -224,12 +245,7 @@ function createBaseStation(): THREE.Group {
         metalness: 0.06,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(0.9, 0.55, 0.7),
-        dark,
-        [0, 1.35, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(0.9, 0.55, 0.7), dark, [0, 1.35, 0]);
     addMesh(
         group,
         new THREE.CylinderGeometry(0.11, 0.13, 1.35, 20),
@@ -282,34 +298,22 @@ function createCasterServer(): THREE.Group {
         emissiveIntensity: 0.22,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.7, 3.25, 1.45),
-        dark,
-        [0, 1.65, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.7, 3.25, 1.45), dark, [0, 1.65, 0]);
 
     for (let index = 0; index < 6; index += 1) {
-        addMesh(
-            group,
-            new THREE.BoxGeometry(1.48, 0.28, 0.08),
-            panel,
-            [0, 0.55 + index * 0.46, 0.765],
-        );
-        addMesh(
-            group,
-            new THREE.SphereGeometry(0.045, 12, 8),
-            light,
-            [-0.55, 0.55 + index * 0.46, 0.82],
-        );
+        addMesh(group, new THREE.BoxGeometry(1.48, 0.28, 0.08), panel, [
+            0,
+            0.55 + index * 0.46,
+            0.765,
+        ]);
+        addMesh(group, new THREE.SphereGeometry(0.045, 12, 8), light, [
+            -0.55,
+            0.55 + index * 0.46,
+            0.82,
+        ]);
     }
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.95, 0.16, 1.7),
-        panel,
-        [0, 0.05, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.95, 0.16, 1.7), panel, [0, 0.05, 0]);
 
     return group;
 }
@@ -331,12 +335,7 @@ function createUav(): THREE.Group {
         opacity: 0.78,
     });
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(1.15, 0.46, 0.85),
-        dark,
-        [0, 0.1, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(1.15, 0.46, 0.85), dark, [0, 0.1, 0]);
     addMesh(
         group,
         new THREE.BoxGeometry(0.72, 0.34, 0.58),
@@ -414,12 +413,7 @@ function createRover(): THREE.Group {
     });
     const white = createStandardMaterial(0xe9e9e6);
 
-    addMesh(
-        group,
-        new THREE.BoxGeometry(2.2, 0.65, 1.35),
-        dark,
-        [0, 0.58, 0],
-    );
+    addMesh(group, new THREE.BoxGeometry(2.2, 0.65, 1.35), dark, [0, 0.58, 0]);
     addMesh(
         group,
         new THREE.BoxGeometry(1.25, 0.48, 1.0),
@@ -697,7 +691,9 @@ export function WelcomeThreeScene({
         const modelNodes = new Map<WelcomeSceneNode, InteractiveNode>();
         const pathRuntimes: DataPath[] = [];
         const loader = new GLTFLoader();
-        const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+        const mediaQuery = window.matchMedia(
+            '(prefers-reduced-motion: reduce)',
+        );
 
         loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -725,6 +721,8 @@ export function WelcomeThreeScene({
         let pointerInfluence = initialProfile.pointerInfluence;
         let heroWorldScale = initialProfile.heroWorldScale;
         let focusWorldScale = initialProfile.focusWorldScale;
+        let heroWorldX = initialProfile.heroWorldX;
+        let focusWorldX = initialProfile.focusWorldX;
         let heroWorldY = initialProfile.heroWorldY;
         let focusWorldY = initialProfile.focusWorldY;
 
@@ -812,9 +810,13 @@ export function WelcomeThreeScene({
                 'base',
                 'caster',
                 [
-                    NODE_POSITIONS.base.clone().add(new THREE.Vector3(0, 1.15, 0)),
+                    NODE_POSITIONS.base
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.15, 0)),
                     new THREE.Vector3(-2.4, 2.0, -0.8),
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.6, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.6, 0)),
                 ],
                 0.11,
             ),
@@ -822,9 +824,13 @@ export function WelcomeThreeScene({
                 'caster',
                 'uav',
                 [
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.65, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.65, 0)),
                     new THREE.Vector3(2.0, 2.6, -1.0),
-                    NODE_POSITIONS.uav.clone().add(new THREE.Vector3(0, 0.1, 0)),
+                    NODE_POSITIONS.uav
+                        .clone()
+                        .add(new THREE.Vector3(0, 0.1, 0)),
                 ],
                 0.14,
             ),
@@ -832,9 +838,13 @@ export function WelcomeThreeScene({
                 'caster',
                 'rover',
                 [
-                    NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.4, 0)),
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.4, 0)),
                     new THREE.Vector3(2.0, 1.45, 1.25),
-                    NODE_POSITIONS.rover.clone().add(new THREE.Vector3(0, 1.0, 0)),
+                    NODE_POSITIONS.rover
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.0, 0)),
                 ],
                 0.09,
             ),
@@ -842,13 +852,13 @@ export function WelcomeThreeScene({
 
         for (const connection of connections) {
             world.add(connection.mesh);
-            connection.runtime.particles.forEach((particle) => world.add(particle));
+            connection.runtime.particles.forEach((particle) =>
+                world.add(particle),
+            );
             pathRuntimes.push(connection.runtime);
         }
 
-        const loadRealModel = (
-            id: WelcomeReplaceableModelNode,
-        ): void => {
+        const loadRealModel = (id: WelcomeReplaceableModelNode): void => {
             const asset = WELCOME_MODEL_ASSETS[id];
 
             if (!asset.url) {
@@ -872,9 +882,7 @@ export function WelcomeThreeScene({
 
                     const model = gltf.scene;
                     normalizeLoadedModel(model, asset.targetSize);
-                    model.position.add(
-                        new THREE.Vector3(...asset.position),
-                    );
+                    model.position.add(new THREE.Vector3(...asset.position));
                     model.rotation.set(...asset.rotation);
                     model.scale.multiplyScalar(asset.scale);
                     model.traverse((child: THREE.Object3D) => {
@@ -907,16 +915,15 @@ export function WelcomeThreeScene({
         (['base', 'uav'] as const).forEach(loadRealModel);
 
         const updateScrollTarget = (): void => {
+            const hero = document.querySelector<HTMLElement>(
+                '[data-welcome-hero]',
+            );
+
             const architecture = document.querySelector<HTMLElement>(
                 '[data-welcome-architecture]',
             );
-            const steps = Array.from(
-                document.querySelectorAll<HTMLElement>(
-                    '[data-welcome-architecture-step]',
-                ),
-            );
 
-            if (!architecture || steps.length !== 4) {
+            if (!hero || !architecture) {
                 const maximum = Math.max(
                     1,
                     document.documentElement.scrollHeight - window.innerHeight,
@@ -927,80 +934,111 @@ export function WelcomeThreeScene({
                 return;
             }
 
-            const viewportFocus =
-                window.scrollY + window.innerHeight * 0.52;
+            const viewportHeight = window.innerHeight;
+
+            const heroRect = hero.getBoundingClientRect();
+
             const architectureRect = architecture.getBoundingClientRect();
+
+            const heroBottom = window.scrollY + heroRect.bottom;
+
             const architectureTop = window.scrollY + architectureRect.top;
+
             const architectureBottom =
                 architectureTop + architectureRect.height;
-            const stepCenters = steps.map((step) => {
-                const bounds = step.getBoundingClientRect();
 
-                return window.scrollY + bounds.top + bounds.height / 2;
-            });
-            const transitionStart =
-                architectureTop - window.innerHeight * 0.72;
-            const firstCenter = stepCenters[0];
+            /*
+             * Hero:
+             * giữ network thu nhỏ bên phải.
+             *
+             * Hero -> Architecture:
+             * camera tiến vào giữa toàn network.
+             */
+            const transitionStart = heroBottom - viewportHeight * 0.3;
 
-            if (viewportFocus <= transitionStart) {
+            const transitionEnd = architectureTop + viewportHeight * 0.08;
+
+            /*
+             * Camera curve có 7 điểm:
+             *
+             * 0/6 Hero overview
+             * 1/6 Center overview
+             * 2/6 Base
+             * 3/6 Caster
+             * 4/6 UAV
+             * 5/6 Rover
+             * 6/6 Exit overview
+             */
+            const centerStage = 1 / 6;
+            const roverStage = 5 / 6;
+
+            if (window.scrollY <= transitionStart) {
                 scrollTarget = 0;
 
                 return;
             }
 
-            if (viewportFocus <= firstCenter) {
+            if (window.scrollY <= transitionEnd) {
                 const progress = clamp(
-                    (viewportFocus - transitionStart) /
-                        Math.max(1, firstCenter - transitionStart),
+                    (window.scrollY - transitionStart) /
+                        Math.max(1, transitionEnd - transitionStart),
                     0,
                     1,
                 );
 
-                scrollTarget = THREE.MathUtils.lerp(0, 0.2, progress);
+                scrollTarget = THREE.MathUtils.lerp(0, centerStage, progress);
 
                 return;
             }
 
-            for (let index = 0; index < stepCenters.length - 1; index += 1) {
-                const currentCenter = stepCenters[index];
-                const nextCenter = stepCenters[index + 1];
+            /*
+             * Architecture được pin trong 500svh.
+             * Trong thời gian này camera lia tuần tự
+             * từ center → Base → Caster → UAV → Rover.
+             */
+            if (window.scrollY < architectureBottom - viewportHeight) {
+                const availableScroll = Math.max(
+                    1,
+                    architectureRect.height - viewportHeight,
+                );
 
-                if (
-                    viewportFocus >= currentCenter &&
-                    viewportFocus <= nextCenter
-                ) {
-                    const progress = clamp(
-                        (viewportFocus - currentCenter) /
-                            Math.max(1, nextCenter - currentCenter),
-                        0,
-                        1,
-                    );
-                    const currentStage = (index + 1) / 5;
-                    const nextStage = (index + 2) / 5;
+                const architectureProgress = clamp(
+                    (window.scrollY - architectureTop) / availableScroll,
+                    0,
+                    1,
+                );
 
-                    scrollTarget = THREE.MathUtils.lerp(
-                        currentStage,
-                        nextStage,
-                        progress,
-                    );
+                const easedProgress = THREE.MathUtils.smoothstep(
+                    architectureProgress,
+                    0.04,
+                    0.94,
+                );
 
-                    return;
-                }
+                scrollTarget = THREE.MathUtils.lerp(
+                    centerStage,
+                    roverStage,
+                    easedProgress,
+                );
+
+                return;
             }
 
-            const lastCenter = stepCenters[stepCenters.length - 1];
-            const transitionEnd = Math.max(
-                lastCenter + window.innerHeight * 0.45,
-                architectureBottom - window.innerHeight * 0.2,
-            );
+            /*
+             * Sau bước Rover:
+             * toàn bộ Architecture được thả,
+             * camera lùi lại overview.
+             */
+            const exitStart = architectureBottom - viewportHeight;
+
+            const exitEnd = architectureBottom - viewportHeight * 0.15;
+
             const exitProgress = clamp(
-                (viewportFocus - lastCenter) /
-                    Math.max(1, transitionEnd - lastCenter),
+                (window.scrollY - exitStart) / Math.max(1, exitEnd - exitStart),
                 0,
                 1,
             );
 
-            scrollTarget = THREE.MathUtils.lerp(0.8, 1, exitProgress);
+            scrollTarget = THREE.MathUtils.lerp(roverStage, 1, exitProgress);
         };
 
         const updateSize = (): void => {
@@ -1017,6 +1055,8 @@ export function WelcomeThreeScene({
             pointerInfluence = profile.pointerInfluence;
             heroWorldScale = profile.heroWorldScale;
             focusWorldScale = profile.focusWorldScale;
+            heroWorldX = profile.heroWorldX;
+            focusWorldX = profile.focusWorldX;
             heroWorldY = profile.heroWorldY;
             focusWorldY = profile.focusWorldY;
             grid.visible = profile.showGrid;
@@ -1121,9 +1161,7 @@ export function WelcomeThreeScene({
                 renderer.domElement.releasePointerCapture(event.pointerId);
             }
 
-            renderer.domElement.style.cursor = hoveredNode
-                ? 'pointer'
-                : 'grab';
+            renderer.domElement.style.cursor = hoveredNode ? 'pointer' : 'grab';
         };
 
         const handlePointerLeave = (): void => {
@@ -1164,7 +1202,10 @@ export function WelcomeThreeScene({
         renderer.domElement.addEventListener('pointerdown', handlePointerDown);
         renderer.domElement.addEventListener('pointerup', endPointerDrag);
         renderer.domElement.addEventListener('pointercancel', endPointerDrag);
-        renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
+        renderer.domElement.addEventListener(
+            'pointerleave',
+            handlePointerLeave,
+        );
         renderer.domElement.addEventListener('click', handleClick);
 
         updateScrollTarget();
@@ -1185,12 +1226,8 @@ export function WelcomeThreeScene({
             ),
         );
         world.position.set(
-            0,
-            THREE.MathUtils.lerp(
-                heroWorldY,
-                focusWorldY,
-                initialFocusBlend,
-            ),
+            THREE.MathUtils.lerp(heroWorldX, focusWorldX, initialFocusBlend),
+            THREE.MathUtils.lerp(heroWorldY, focusWorldY, initialFocusBlend),
             0,
         );
         camera.lookAt(lookAtTarget);
@@ -1213,19 +1250,14 @@ export function WelcomeThreeScene({
             cameraTargetDesired.copy(targetCurve.getPointAt(scrollCurrent));
 
             if (!reducedMotion && pointerInfluence > 0) {
-                cameraDesired.x +=
-                    pointerSmoothed.x * 0.45 * pointerInfluence;
-                cameraDesired.y +=
-                    pointerSmoothed.y * 0.25 * pointerInfluence;
+                cameraDesired.x += pointerSmoothed.x * 0.45 * pointerInfluence;
+                cameraDesired.y += pointerSmoothed.y * 0.25 * pointerInfluence;
                 cameraTargetDesired.x +=
                     pointerSmoothed.x * 0.2 * pointerInfluence;
             }
 
             camera.position.lerp(cameraDesired, reducedMotion ? 1 : 0.065);
-            lookAtTarget.lerp(
-                cameraTargetDesired,
-                reducedMotion ? 1 : 0.075,
-            );
+            lookAtTarget.lerp(cameraTargetDesired, reducedMotion ? 1 : 0.075);
             camera.lookAt(lookAtTarget);
 
             const focusBlend = THREE.MathUtils.smoothstep(
@@ -1238,6 +1270,12 @@ export function WelcomeThreeScene({
                 focusWorldScale,
                 focusBlend,
             );
+            const desiredWorldX = THREE.MathUtils.lerp(
+                heroWorldX,
+                focusWorldX,
+                focusBlend,
+            );
+
             const desiredWorldY = THREE.MathUtils.lerp(
                 heroWorldY,
                 focusWorldY,
@@ -1250,6 +1288,13 @@ export function WelcomeThreeScene({
             );
 
             world.scale.setScalar(nextWorldScale);
+
+            world.position.x = THREE.MathUtils.lerp(
+                world.position.x,
+                desiredWorldX,
+                reducedMotion ? 1 : 0.08,
+            );
+
             world.position.y = THREE.MathUtils.lerp(
                 world.position.y,
                 desiredWorldY,
@@ -1263,16 +1308,13 @@ export function WelcomeThreeScene({
                 baseFov + 3,
             );
             camera.fov +=
-                (desiredFov - camera.fov) *
-                (reducedMotion ? 1 : 0.06);
+                (desiredFov - camera.fov) * (reducedMotion ? 1 : 0.06);
             camera.updateProjectionMatrix();
 
             world.rotation.y +=
-                (dragRotationY - world.rotation.y) *
-                (reducedMotion ? 1 : 0.08);
+                (dragRotationY - world.rotation.y) * (reducedMotion ? 1 : 0.08);
             world.rotation.x +=
-                (dragRotationX - world.rotation.x) *
-                (reducedMotion ? 1 : 0.08);
+                (dragRotationX - world.rotation.x) * (reducedMotion ? 1 : 0.08);
 
             if (!dragging) {
                 updateHoveredNode();
@@ -1280,7 +1322,8 @@ export function WelcomeThreeScene({
 
             for (const node of modelNodes.values()) {
                 const emphasized =
-                    node.id === activeNodeRef.current || node.id === hoveredNode;
+                    node.id === activeNodeRef.current ||
+                    node.id === hoveredNode;
                 const targetScale = emphasized ? 1.075 : node.baseScale;
                 const nextScale = THREE.MathUtils.lerp(
                     node.slot.scale.x,
@@ -1349,7 +1392,10 @@ export function WelcomeThreeScene({
                 'pointerdown',
                 handlePointerDown,
             );
-            renderer.domElement.removeEventListener('pointerup', endPointerDrag);
+            renderer.domElement.removeEventListener(
+                'pointerup',
+                endPointerDrag,
+            );
             renderer.domElement.removeEventListener(
                 'pointercancel',
                 endPointerDrag,

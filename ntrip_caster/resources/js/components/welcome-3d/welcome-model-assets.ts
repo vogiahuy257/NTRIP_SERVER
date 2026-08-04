@@ -1,10 +1,10 @@
 export type WelcomeSceneNode = 'base' | 'caster' | 'uav' | 'rover';
 
-export type WelcomeReplaceableModelNode = 'base' | 'uav';
+export type WelcomeReplaceableModelNode = WelcomeSceneNode;
 
 type WelcomeModelAsset = {
     /**
-     * Public GLB URL for a real model.
+     * Public GLB URL.
      *
      * Keep null to use the built-in procedural fallback.
      */
@@ -20,8 +20,8 @@ type WelcomeModelAsset = {
 };
 
 /**
- * Only the RTK base and UAV are replaceable with external GLB files.
- * The NTRIP Caster and rover always use the procedural scene models.
+ * Every scene node may use an external GLB.
+ * Set url to null to retain its procedural fallback.
  */
 export const WELCOME_MODEL_ASSETS: Record<
     WelcomeReplaceableModelNode,
@@ -34,9 +34,26 @@ export const WELCOME_MODEL_ASSETS: Record<
         rotation: [0, 0, 0],
         scale: 1,
     },
+
+    caster: {
+        url: '/models/ntrip-caster.glb',
+        targetSize: 3.4,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1,
+    },
+
     uav: {
         url: '/models/uav-zd550.glb',
         targetSize: 3.7,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1,
+    },
+
+    rover: {
+        url: '/models/rover.glb',
+        targetSize: 3.2,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,
