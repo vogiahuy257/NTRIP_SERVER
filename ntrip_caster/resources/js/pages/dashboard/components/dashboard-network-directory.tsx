@@ -191,7 +191,7 @@ export function DashboardNetworkDirectory({
         <section
             className={cn(
                 'ntrip-glass-panel',
-                'pointer-events-auto absolute right-0 bottom-10 left-0 z-[999] overflow-hidden rounded-2xl sm:top-0 sm:right-auto sm:bottom-auto sm:w-96',
+                'pointer-events-auto absolute right-0 bottom-0 left-0 z-[999] overflow-hidden rounded-2xl sm:top-0 sm:right-auto sm:bottom-auto sm:w-96',
             )}
         >
             <header className="flex items-center justify-between border-b border-ntrip-ink/8 px-3 py-2.5">
@@ -274,7 +274,7 @@ export function DashboardNetworkDirectory({
                         </div>
                     </div>
 
-                    <div className="max-h-50 overflow-y-auto p-2 sm:max-h-[calc(60vh-10rem)]">
+                    <div className="min-h-64 max-h-[45dvh] overflow-y-auto p-2 sm:min-h-0 sm:max-h-[calc(70vh-10rem)]">
                         {filteredStations.length > 0 ? (
                             <div className="grid gap-0.5">
                                 {filteredStations.map((station) => (
@@ -333,7 +333,7 @@ export function DashboardNetworkDirectory({
                         </div>
                     </div>
 
-                    <div className="max-h-64 overflow-y-auto p-2 sm:max-h-[calc(66vh-9rem)]">
+                    <div className="min-h-64 max-h-[45dvh] overflow-y-auto p-2 sm:min-h-0 sm:max-h-[calc(70vh-9rem)]">
                         {filteredRovers.length > 0 ? (
                             <div className="grid gap-0.5">
                                 {filteredRovers.map((rover) => (
