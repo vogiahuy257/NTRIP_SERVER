@@ -11,10 +11,10 @@ import {
     ServerCog,
     ShieldCheck,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
-import type { WelcomeSceneNode } from '@/components/welcome-3d/welcome-model-assets';
 import { WelcomeThreeScene } from '@/components/welcome-3d/welcome-three-scene';
+import type { WelcomeSceneNode } from '@/components/welcome-3d/welcome-model-assets';
 import { dashboard, login, register } from '@/routes';
 
 const NODE_ORDER: WelcomeSceneNode[] = ['base', 'caster', 'uav', 'rover'];
@@ -110,10 +110,65 @@ function scrollToSection(id: string): void {
     });
 }
 
+function scrollToArchitectureNode(node: WelcomeSceneNode): void {
+    document
+        .querySelector<HTMLElement>(
+            `[data-welcome-architecture-step="${node}"]`,
+        )
+        ?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+        });
+}
+
 export default function Welcome() {
     const { auth } = usePage().props;
     const [activeNode, setActiveNode] = useState<WelcomeSceneNode>('caster');
     const activeContent = NODE_CONTENT[activeNode];
+
+    useEffect(() => {
+        const steps = Array.from(
+            document.querySelectorAll<HTMLElement>(
+                '[data-welcome-architecture-step]',
+            ),
+        );
+
+        if (steps.length === 0) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                const visibleEntry = entries
+                    .filter((entry) => entry.isIntersecting)
+                    .sort(
+                        (left, right) =>
+                            right.intersectionRatio - left.intersectionRatio,
+                    )[0];
+
+                const node = visibleEntry?.target.getAttribute(
+                    'data-welcome-architecture-step',
+                );
+
+                if (
+                    node === 'base' ||
+                    node === 'caster' ||
+                    node === 'uav' ||
+                    node === 'rover'
+                ) {
+                    setActiveNode(node);
+                }
+            },
+            {
+                rootMargin: '-32% 0px -42% 0px',
+                threshold: [0.2, 0.45, 0.7],
+            },
+        );
+
+        steps.forEach((step) => observer.observe(step));
+
+        return () => observer.disconnect();
+    }, []);
 
     return (
         <>
@@ -131,8 +186,7 @@ export default function Welcome() {
                     style={{
                         backgroundImage:
                             'linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px)',
-                        backgroundSize:
-                            'clamp(2.5rem, 8vw, 4rem) clamp(2.5rem, 8vw, 4rem)',
+                        backgroundSize: 'clamp(2.5rem, 8vw, 4rem) clamp(2.5rem, 8vw, 4rem)',
                         maskImage:
                             'linear-gradient(to bottom, black, transparent 88%)',
                     }}
@@ -141,12 +195,12 @@ export default function Welcome() {
                 <WelcomeThreeScene
                     activeNode={activeNode}
                     onActiveNodeChange={setActiveNode}
-                    className="fixed inset-x-0 top-[4.75rem] z-0 h-[42svh] min-h-64 sm:top-20 sm:h-[48svh] md:h-[52svh] lg:inset-0 lg:h-auto lg:min-h-0"
+                    className="fixed inset-x-0 top-[4.5rem] z-0 h-[38svh] min-h-56 sm:top-20 sm:h-[44svh] md:h-[50svh] lg:inset-y-20 lg:right-0 lg:left-[42%] lg:h-auto lg:min-h-0 xl:left-[40%]"
                 />
 
                 <div
                     aria-hidden="true"
-                    className="pointer-events-none fixed inset-x-0 top-[4.75rem] z-[2] h-[42svh] bg-gradient-to-b from-transparent via-transparent to-[#f7f7f3] sm:top-20 sm:h-[48svh] md:h-[52svh] lg:hidden"
+                    className="pointer-events-none fixed inset-x-0 top-[4.5rem] z-[2] h-[38svh] bg-gradient-to-b from-transparent via-transparent to-[#f7f7f3] sm:top-20 sm:h-[44svh] md:h-[50svh] lg:hidden"
                 />
 
                 <header className="fixed inset-x-0 top-0 z-40 px-2.5 pt-2.5 sm:px-4 sm:pt-4">
@@ -192,12 +246,8 @@ export default function Welcome() {
                                     href={dashboard()}
                                     className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black px-3 text-xs font-semibold text-white transition hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4"
                                 >
-                                    <span className="hidden min-[360px]:inline">
-                                        Dashboard
-                                    </span>
-                                    <span className="min-[360px]:hidden">
-                                        Open
-                                    </span>
+                                    <span className="hidden min-[360px]:inline">Dashboard</span>
+                                    <span className="min-[360px]:hidden">Open</span>
                                     <ArrowRight className="size-3.5" />
                                 </Link>
                             ) : (
@@ -215,9 +265,7 @@ export default function Welcome() {
                                         <span className="hidden min-[360px]:inline">
                                             Get started
                                         </span>
-                                        <span className="min-[360px]:hidden">
-                                            Start
-                                        </span>
+                                        <span className="min-[360px]:hidden">Start</span>
                                         <ArrowRight className="size-3.5" />
                                     </Link>
                                 </>
@@ -229,15 +277,16 @@ export default function Welcome() {
                 <main className="relative z-10">
                     <section
                         id="hero"
-                        className="mx-auto flex min-h-[100svh] max-w-[1440px] scroll-mt-20 flex-col justify-end px-4 pt-[calc(42svh+6.5rem)] pb-10 sm:px-6 sm:pt-[calc(48svh+7rem)] sm:pb-14 md:px-8 md:pt-[calc(52svh+7rem)] lg:grid lg:grid-cols-[minmax(0,0.82fr)_minmax(30rem,1.18fr)] lg:items-center lg:px-10 lg:pt-28 lg:pb-20"
+                        data-welcome-hero
+                        className="mx-auto flex min-h-[100svh] max-w-[1440px] scroll-mt-20 flex-col justify-end px-4 pt-[calc(38svh+6.25rem)] pb-10 sm:px-6 sm:pt-[calc(44svh+7rem)] sm:pb-14 md:px-8 md:pt-[calc(50svh+7rem)] lg:grid lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:items-center lg:px-10 lg:pt-28 lg:pb-20"
                     >
-                        <div className="max-w-2xl rounded-[1.5rem] border border-black/[0.07] bg-white/84 p-4 shadow-[0_24px_75px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-6 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                        <div className="max-w-2xl rounded-[1.5rem] border border-black/[0.07] bg-white/84 p-4 shadow-[0_24px_75px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-6 lg:max-w-[40rem] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
                             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-black/55 uppercase backdrop-blur-xl sm:text-[11px]">
                                 <span className="size-1.5 rounded-full bg-black" />
                                 Realtime GNSS infrastructure
                             </div>
 
-                            <h1 className="mt-5 max-w-[12ch] text-[clamp(2.45rem,11.5vw,4.75rem)] leading-[0.92] font-semibold tracking-[-0.065em] text-black sm:mt-6 sm:text-[clamp(3.5rem,9vw,5.5rem)] lg:text-[clamp(4.75rem,7vw,7rem)]">
+                            <h1 className="mt-5 max-w-[11ch] text-[clamp(2.35rem,11vw,4.25rem)] leading-[0.92] font-semibold tracking-[-0.065em] text-black sm:mt-6 sm:text-[clamp(3rem,8vw,5rem)] lg:text-[clamp(3.75rem,5.2vw,5.75rem)] xl:text-[clamp(4rem,5vw,6.25rem)]">
                                 Precision correction.
                                 <span className="block text-black/35">
                                     Delivered everywhere.
@@ -301,7 +350,7 @@ export default function Welcome() {
                         aria-label="Interactive network controls"
                         className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6 md:px-8 lg:px-10 lg:pb-24"
                     >
-                        <div className="rounded-[1.5rem] border border-black/[0.08] bg-white/86 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-4 lg:ml-auto lg:max-w-xl">
+                        <div className="rounded-[1.5rem] border border-black/[0.08] bg-white/86 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-4 lg:max-w-[36rem]">
                             <div className="flex items-start justify-between gap-3 px-1 pb-3">
                                 <div className="min-w-0">
                                     <p className="text-[10px] font-bold tracking-[0.14em] text-black/38 uppercase">
@@ -359,71 +408,96 @@ export default function Welcome() {
 
                     <section
                         id="architecture"
-                        className="mx-auto flex max-w-[1440px] scroll-mt-20 items-center px-4 py-16 sm:min-h-[100svh] sm:px-6 sm:py-20 md:px-8 lg:min-h-[115svh] lg:px-10"
+                        data-welcome-architecture
+                        className="mx-auto max-w-[1440px] scroll-mt-20 px-4 pt-[calc(38svh+6rem)] pb-16 sm:px-6 sm:pt-[calc(44svh+7rem)] sm:pb-20 md:px-8 md:pt-[calc(50svh+7rem)] lg:px-10 lg:pt-28 lg:pb-28"
                     >
-                        <div className="ml-auto w-full rounded-[1.5rem] border border-black/[0.08] bg-white/90 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:max-w-xl sm:rounded-[2rem] sm:p-7 lg:p-8">
-                            <p className="text-[10px] font-bold tracking-[0.16em] text-black/38 uppercase sm:text-[11px]">
-                                Architecture
-                            </p>
-                            <h2 className="mt-3 max-w-[13ch] text-[clamp(2.25rem,10vw,4rem)] leading-[0.96] font-semibold tracking-[-0.055em] sm:text-5xl lg:text-6xl">
-                                From source to RTK Fixed.
-                            </h2>
-                            <p className="mt-4 max-w-lg text-sm leading-6 text-black/52 sm:mt-5 sm:text-base sm:leading-7">
-                                One continuous correction path connects field
-                                infrastructure to autonomous clients while every
-                                stream remains observable.
-                            </p>
+                        <div className="w-full max-w-xl lg:max-w-[34rem]">
+                            <div className="rounded-[1.5rem] border border-black/[0.08] bg-white/92 p-4 shadow-[0_28px_90px_rgba(0,0,0,0.1)] backdrop-blur-2xl sm:rounded-[2rem] sm:p-7 lg:sticky lg:top-24 lg:p-8">
+                                <p className="text-[10px] font-bold tracking-[0.16em] text-black/38 uppercase sm:text-[11px]">
+                                    Architecture
+                                </p>
+                                <h2 className="mt-3 max-w-[13ch] text-[clamp(2.15rem,9.5vw,3.75rem)] leading-[0.96] font-semibold tracking-[-0.055em] sm:text-5xl lg:text-6xl">
+                                    From source to RTK Fixed.
+                                </h2>
+                                <p className="mt-4 max-w-lg text-sm leading-6 text-black/52 sm:mt-5 sm:text-base sm:leading-7">
+                                    Scroll through the four operational layers.
+                                    The camera follows the active component and
+                                    keeps its RTCM path visible.
+                                </p>
+                            </div>
 
-                            <div className="mt-6 grid gap-2 sm:mt-7">
+                            <div className="mt-5 grid gap-5 sm:mt-7 sm:gap-7 lg:mt-10 lg:gap-10">
                                 {NODE_ORDER.map((node) => {
                                     const content = NODE_CONTENT[node];
                                     const selected = activeNode === node;
 
                                     return (
-                                        <button
+                                        <article
                                             key={node}
-                                            type="button"
-                                            aria-pressed={selected}
-                                            onClick={() => setActiveNode(node)}
-                                            className={`group grid min-h-14 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:grid-cols-[2.5rem_minmax(0,1fr)_auto] sm:gap-3 sm:px-4 sm:py-3 ${
-                                                selected
-                                                    ? 'border-black/12 bg-black text-white shadow-[0_14px_30px_rgba(0,0,0,0.14)]'
-                                                    : 'border-black/[0.07] bg-white/62 hover:border-black/12 hover:bg-white'
-                                            }`}
+                                            id={`architecture-${node}`}
+                                            data-welcome-architecture-step={node}
+                                            className="flex min-h-[48svh] scroll-mt-28 items-center sm:min-h-[54svh] lg:min-h-[62svh]"
                                         >
-                                            <span
-                                                className={`grid size-9 place-items-center rounded-xl text-xs font-bold sm:size-10 ${
+                                            <button
+                                                type="button"
+                                                aria-pressed={selected}
+                                                onClick={() => {
+                                                    setActiveNode(node);
+                                                    scrollToArchitectureNode(node);
+                                                }}
+                                                onFocus={() => setActiveNode(node)}
+                                                onPointerEnter={() =>
+                                                    setActiveNode(node)
+                                                }
+                                                className={`group grid w-full grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 rounded-[1.35rem] border px-4 py-4 text-left shadow-[0_18px_55px_rgba(0,0,0,0.08)] backdrop-blur-2xl transition focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:gap-4 sm:rounded-[1.6rem] sm:px-5 sm:py-5 ${
                                                     selected
-                                                        ? 'bg-white/12 text-white'
-                                                        : 'bg-black/[0.05] text-black/45'
+                                                        ? 'border-black bg-black text-white shadow-[0_24px_70px_rgba(0,0,0,0.2)]'
+                                                        : 'border-black/[0.08] bg-white/90 hover:-translate-y-0.5 hover:border-black/14 hover:bg-white'
                                                 }`}
                                             >
-                                                {content.index}
-                                            </span>
-
-                                            <span className="min-w-0">
-                                                <span className="block truncate text-xs font-semibold sm:text-sm">
-                                                    {content.label}
-                                                </span>
                                                 <span
-                                                    className={`mt-0.5 block overflow-hidden text-[10px] leading-4 sm:text-xs ${
+                                                    className={`grid size-10 place-items-center rounded-xl text-xs font-bold sm:size-12 sm:rounded-2xl sm:text-sm ${
                                                         selected
-                                                            ? 'text-white/55'
-                                                            : 'text-black/42'
+                                                            ? 'bg-white/12 text-white'
+                                                            : 'bg-black/[0.05] text-black/45'
                                                     }`}
                                                 >
-                                                    {content.title}
+                                                    {content.index}
                                                 </span>
-                                            </span>
 
-                                            <ArrowRight
-                                                className={`size-4 shrink-0 transition group-hover:translate-x-0.5 ${
-                                                    selected
-                                                        ? 'text-white/65'
-                                                        : 'text-black/28'
-                                                }`}
-                                            />
-                                        </button>
+                                                <span className="min-w-0">
+                                                    <span className="block text-sm font-semibold sm:text-base">
+                                                        {content.label}
+                                                    </span>
+                                                    <span
+                                                        className={`mt-1 block text-xs leading-5 sm:text-sm sm:leading-6 ${
+                                                            selected
+                                                                ? 'text-white/58'
+                                                                : 'text-black/48'
+                                                        }`}
+                                                    >
+                                                        {content.title}
+                                                    </span>
+                                                    <span
+                                                        className={`mt-2 hidden text-xs leading-5 sm:block ${
+                                                            selected
+                                                                ? 'text-white/42'
+                                                                : 'text-black/38'
+                                                        }`}
+                                                    >
+                                                        {content.description}
+                                                    </span>
+                                                </span>
+
+                                                <ArrowRight
+                                                    className={`size-4 shrink-0 transition group-hover:translate-x-0.5 sm:size-5 ${
+                                                        selected
+                                                            ? 'text-white/65'
+                                                            : 'text-black/28'
+                                                    }`}
+                                                />
+                                            </button>
+                                        </article>
                                     );
                                 })}
                             </div>
@@ -513,25 +587,13 @@ export default function Welcome() {
 
                             <div className="grid border-t border-white/10 sm:grid-cols-3">
                                 {[
-                                    [
-                                        '01',
-                                        'Base stations',
-                                        'RTCM source layer',
-                                    ],
-                                    [
-                                        '02',
-                                        'Caster runtime',
-                                        'Realtime control plane',
-                                    ],
-                                    [
-                                        '03',
-                                        'UAV and rover',
-                                        'Precision client layer',
-                                    ],
+                                    ['01', 'Base stations', 'RTCM source layer'],
+                                    ['02', 'Caster runtime', 'Realtime control plane'],
+                                    ['03', 'UAV and rover', 'Precision client layer'],
                                 ].map(([index, title, description]) => (
                                     <div
                                         key={index}
-                                        className="border-b border-white/10 p-5 last:border-b-0 sm:border-r sm:border-b-0 sm:p-6 sm:last:border-r-0"
+                                        className="border-b border-white/10 p-5 last:border-b-0 sm:border-r sm:border-b-0 sm:last:border-r-0 sm:p-6"
                                     >
                                         <span className="text-[10px] font-bold tracking-[0.14em] text-white/30">
                                             {index}
