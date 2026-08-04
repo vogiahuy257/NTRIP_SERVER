@@ -378,10 +378,18 @@ export function MapTopNavigation() {
                         <DropdownMenuContent
                             align="end"
                             sideOffset={8}
-                            className={cn(
-                                USER_MENU_SURFACE_CLASS_NAME,
-                                'z-[120] w-64',
-                            )}
+                            className="
+                                w-64
+                                overflow-hidden
+                                rounded-2xl
+                                border border-black/10
+                                bg-white/65
+                                p-2
+                                text-black
+                                shadow-[0_18px_50px_rgba(0,0,0,0.18)]
+                                backdrop-blur-2xl
+                                backdrop-saturate-150
+                            "
                         >
                             <UserMenuContent
                                 user={user}
