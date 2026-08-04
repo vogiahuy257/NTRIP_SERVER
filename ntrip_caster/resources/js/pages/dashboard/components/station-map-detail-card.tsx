@@ -47,7 +47,6 @@ function clamp(value: number, minimum: number, maximum: number): number {
 export function StationMapDetailCard({
     station,
     anchor,
-    persistent,
     onClose,
     onHoverChange,
 }: StationMapDetailCardProps) {
@@ -109,9 +108,13 @@ export function StationMapDetailCard({
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent | TouchEvent) => {
             // Nếu click vào bên trong thẻ thì không làm gì cả
-            if (cardRef.current && cardRef.current.contains(event.target as Node)) {
+            if (
+                cardRef.current &&
+                cardRef.current.contains(event.target as Node)
+            ) {
                 return;
             }
+
             // Nếu click ra ngoài, gọi hàm onClose được truyền từ cha xuống để đóng thẻ
             onClose();
         };
@@ -135,7 +138,9 @@ export function StationMapDetailCard({
             className={cn(
                 'ntrip-glass-panel',
                 'pointer-events-auto fixed z-[90] w-[min(17rem,calc(100vw-1.5rem))] overflow-visible rounded-2xl transition duration-300 ease-out sm:w-80',
-                position.ready ? 'translate-y-0 opacity-100' : 'translate-y-1 opacity-0',
+                position.ready
+                    ? 'translate-y-0 opacity-100'
+                    : 'translate-y-1 opacity-0',
             )}
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}

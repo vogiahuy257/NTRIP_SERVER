@@ -92,6 +92,17 @@ function isValidMapCoordinate(longitude: number, latitude: number): boolean {
     );
 }
 
+const MOBILE_MAP_BREAKPOINT_PX = 640;
+const MOBILE_FOCUS_Y_OFFSET_PX = -88;
+
+function getResponsiveFocusOffset(map: MapLibreMap): [number, number] {
+    const width = map.getContainer().clientWidth;
+
+    return width < MOBILE_MAP_BREAKPOINT_PX
+        ? [0, MOBILE_FOCUS_Y_OFFSET_PX]
+        : [0, 0];
+}
+
 export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
     function NtripMap(
         {
@@ -214,7 +225,8 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
             /*
              * Ước lượng chiều rộng card để quyết định mở trái hay phải.
              */
-            const estimatedCardWidth = 0;
+            const estimatedCardWidth =
+                window.innerWidth < MOBILE_MAP_BREAKPOINT_PX ? 272 : 320;
 
             if (imageBounds) {
                 const imageRightOnScreen =
@@ -304,6 +316,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
             if (coordinates.length === 1) {
                 map.easeTo({
                     center: [coordinates[0].longitude, coordinates[0].latitude],
+                    offset: getResponsiveFocusOffset(map),
                     zoom: 14,
                     duration: 700,
                 });
@@ -361,6 +374,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
 
             map.easeTo({
                 center: [station.longitude, station.latitude],
+                offset: getResponsiveFocusOffset(map),
                 zoom: 18,
                 duration: 650,
             });
@@ -378,6 +392,7 @@ export const NtripMap = forwardRef<NtripMapHandle, NtripMapProps>(
 
                 map.easeTo({
                     center: [longitude, latitude],
+                    offset: getResponsiveFocusOffset(map),
                     zoom: 18,
                     duration: 650,
                 });
