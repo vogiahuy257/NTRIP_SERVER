@@ -28,7 +28,10 @@ import {
     TooltipContent,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { UserMenuContent } from '@/components/user-menu-content';
+import {
+    USER_MENU_SURFACE_CLASS_NAME,
+    UserMenuContent,
+} from '@/components/user-menu-content';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
 import { cn, toUrl } from '@/lib/utils';
@@ -227,7 +230,11 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                                     </Avatar>
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent className="w-56" align="end">
+                            <DropdownMenuContent
+                                className={`${USER_MENU_SURFACE_CLASS_NAME} w-64`}
+                                align="end"
+                                sideOffset={8}
+                            >
                                 {auth.user && (
                                     <UserMenuContent user={auth.user} />
                                 )}

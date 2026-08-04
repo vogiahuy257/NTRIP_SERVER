@@ -8,7 +8,10 @@ import {
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { UserMenuContent } from '@/components/user-menu-content';
+import {
+    USER_MENU_SURFACE_CLASS_NAME,
+    UserMenuContent,
+} from '@/components/user-menu-content';
 import { useMapDashboard } from '@/contexts/map-dashboard-context';
 import { AlertNotificationDrawer } from '@/features/alerts/alert-notification-drawer';
 import { usePendingDevices } from '@/features/pending-devices/use-pending-devices';
@@ -376,9 +379,8 @@ export function MapTopNavigation() {
                             align="end"
                             sideOffset={8}
                             className={cn(
-                                'ntrip-glass-panel-strong',
-                                'z-[120] w-72 overflow-hidden rounded-2xl',
-                                'border-white/42 p-1.5 shadow-ntrip-panel',
+                                USER_MENU_SURFACE_CLASS_NAME,
+                                'z-[120] w-64',
                             )}
                         >
                             <UserMenuContent
