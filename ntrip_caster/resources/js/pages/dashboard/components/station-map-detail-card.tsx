@@ -7,7 +7,6 @@ import {
     RadioTower,
     Wifi,
 } from 'lucide-react';
-
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { StationMapAnchor } from '@/components/map-dashboard/ntrip-map';
@@ -64,7 +63,7 @@ export function StationMapDetailCard({
             return;
         }
 
-        const updatePosition = () => {
+        const updatePosition = (): void => {
             const bounds = card.getBoundingClientRect();
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
@@ -97,34 +96,31 @@ export function StationMapDetailCard({
             });
         };
 
+        const resizeObserver = new ResizeObserver(updatePosition);
+
         updatePosition();
+        resizeObserver.observe(card);
         window.addEventListener('resize', updatePosition);
 
         return () => {
+            resizeObserver.disconnect();
             window.removeEventListener('resize', updatePosition);
         };
     }, [anchor]);
 
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-            // Nếu click vào bên trong thẻ thì không làm gì cả
-            if (
-                cardRef.current &&
-                cardRef.current.contains(event.target as Node)
-            ) {
+        const handlePointerDown = (event: PointerEvent): void => {
+            if (cardRef.current?.contains(event.target as Node)) {
                 return;
             }
 
-            // Nếu click ra ngoài, gọi hàm onClose được truyền từ cha xuống để đóng thẻ
             onClose();
         };
 
-        // Lắng nghe sự kiện click/touch trên toàn bộ trang
-        document.addEventListener('pointerdown', handleClickOutside);
+        document.addEventListener('pointerdown', handlePointerDown);
 
         return () => {
-            // Dọn dẹp event listener khi component unmount
-            document.removeEventListener('pointerdown', handleClickOutside);
+            document.removeEventListener('pointerdown', handlePointerDown);
         };
     }, [onClose]);
 
@@ -137,7 +133,11 @@ export function StationMapDetailCard({
             }}
             className={cn(
                 'ntrip-glass-panel',
-                'pointer-events-auto fixed z-[90] w-[min(17rem,calc(100vw-1.5rem))] overflow-visible rounded-2xl transition duration-300 ease-out sm:w-80',
+                'pointer-events-auto fixed z-[90]',
+                'w-[clamp(13rem,40vw,20rem)]',
+                'max-w-[calc(100vw-1rem)]',
+                'overflow-visible rounded-[clamp(0.75rem,2vw,1rem)]',
+                'transition duration-300 ease-out',
                 position.ready
                     ? 'translate-y-0 opacity-100'
                     : 'translate-y-1 opacity-0',
@@ -156,94 +156,108 @@ export function StationMapDetailCard({
                 )}
             />
 
-            <header className="flex items-start justify-between gap-2.5 border-b border-ntrip-ink/8 px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3">
+            <header className="flex items-start justify-between gap-[clamp(0.5rem,1.5vw,0.75rem)] border-b border-ntrip-ink/8 px-[clamp(0.625rem,2vw,1rem)] py-[clamp(0.5rem,1.6vw,0.75rem)]">
                 <div className="min-w-0">
-                    <StatusPill status={station.health} />
+                    <StatusPill
+                        status={station.health}
+                        className="h-[clamp(1.25rem,4vw,1.75rem)] gap-[clamp(0.25rem,1vw,0.5rem)] rounded-[clamp(0.5rem,1.4vw,0.75rem)] px-[clamp(0.45rem,1.4vw,0.625rem)] text-[clamp(0.6875rem,1.8vw,0.75rem)]"
+                    />
 
-                    <h2 className="mt-1.5 truncate text-base font-semibold tracking-[-0.025em] text-ntrip-ink sm:mt-2 sm:text-lg">
+                    <h2 className="mt-[clamp(0.3rem,1vw,0.5rem)] truncate text-[clamp(0.8125rem,2.4vw,1.125rem)] leading-tight font-semibold tracking-[-0.02em] text-ntrip-ink">
                         {station.name}
                     </h2>
 
-                    <p className="mt-0.5 truncate text-xs text-ntrip-ink/62">
+                    <p className="mt-0.5 truncate text-[clamp(0.6875rem,1.7vw,0.75rem)] leading-4 text-ntrip-ink/62">
                         {station.deviceId} · {station.mountpoint}
                     </p>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-1">
-                    <span className="grid size-8 place-items-center rounded-xl bg-ntrip-teal/13 text-ntrip-teal sm:size-9 sm:rounded-2xl">
-                        <RadioTower className="size-4" strokeWidth={1.8} />
-                    </span>
-                </div>
+                <span className="grid size-[clamp(1.75rem,5vw,2.25rem)] shrink-0 place-items-center rounded-[clamp(0.5rem,1.5vw,1rem)] bg-ntrip-teal/13 text-ntrip-teal">
+                    <RadioTower
+                        className="size-[clamp(0.75rem,2.5vw,1rem)]"
+                        strokeWidth={1.8}
+                    />
+                </span>
             </header>
 
-            <div className="grid grid-cols-2 gap-1.5 p-2 sm:gap-2 sm:p-3">
-                <div className="rounded-xl bg-ntrip-cloud/58 p-2 shadow-ntrip-inset sm:p-2.5">
-                    <p className="text-xs text-ntrip-ink/62">RTCM traffic</p>
-                    <p className="mt-0.5 text-base font-semibold tracking-[-0.02em] tabular-nums sm:mt-1 sm:text-lg">
+            <div className="grid grid-cols-2 gap-[clamp(0.25rem,1vw,0.5rem)] p-[clamp(0.375rem,1.6vw,0.75rem)]">
+                <div className="min-w-0 rounded-[clamp(0.5rem,1.5vw,0.75rem)] bg-ntrip-cloud/58 p-[clamp(0.375rem,1.4vw,0.625rem)] shadow-ntrip-inset">
+                    <p className="truncate text-[clamp(0.6875rem,1.7vw,0.75rem)] leading-4 text-ntrip-ink/62">
+                        RTCM traffic
+                    </p>
+
+                    <p className="mt-0.5 truncate text-[clamp(0.8125rem,2.2vw,1.125rem)] leading-tight font-semibold tracking-[-0.02em] tabular-nums">
                         {formatBps(station.uploadBps)}
-                        <span className="ml-1 text-xs font-medium text-ntrip-ink/38">
+                        <span className="ml-1 text-[clamp(0.6875rem,1.7vw,0.75rem)] font-medium text-ntrip-ink/38">
                             bps
                         </span>
                     </p>
                 </div>
 
-                <div className="rounded-xl bg-ntrip-cloud/58 p-2 shadow-ntrip-inset sm:p-2.5">
-                    <p className="text-xs text-ntrip-ink/62">RTCM age</p>
-                    <p className="mt-0.5 text-base font-semibold tracking-[-0.02em] tabular-nums sm:mt-1 sm:text-lg">
+                <div className="min-w-0 rounded-[clamp(0.5rem,1.5vw,0.75rem)] bg-ntrip-cloud/58 p-[clamp(0.375rem,1.4vw,0.625rem)] shadow-ntrip-inset">
+                    <p className="truncate text-[clamp(0.6875rem,1.7vw,0.75rem)] leading-4 text-ntrip-ink/62">
+                        RTCM age
+                    </p>
+
+                    <p className="mt-0.5 truncate text-[clamp(0.8125rem,2.2vw,1.125rem)] leading-tight font-semibold tracking-[-0.02em] tabular-nums">
                         {station.rtcmAgeMs ?? '—'}
-                        <span className="ml-1 text-xs font-medium text-ntrip-ink/38">
+                        <span className="ml-1 text-[clamp(0.6875rem,1.7vw,0.75rem)] font-medium text-ntrip-ink/38">
                             ms
                         </span>
                     </p>
                 </div>
             </div>
 
-            <dl className="grid gap-1.5 border-t border-ntrip-ink/8 px-3 py-2.5 text-[11px] sm:gap-2 sm:px-4 sm:py-3 sm:text-xs">
-                <div className="flex items-center justify-between gap-4">
-                    <dt className="flex items-center gap-2 text-ntrip-ink/62">
-                        <Wifi className="size-3.5" />
-                        Network
+            <dl className="grid gap-[clamp(0.25rem,1.1vw,0.5rem)] border-t border-ntrip-ink/8 px-[clamp(0.625rem,2vw,1rem)] py-[clamp(0.5rem,1.6vw,0.75rem)] text-[clamp(0.6875rem,1.7vw,0.75rem)] leading-4">
+                <div className="flex items-center justify-between gap-2">
+                    <dt className="flex min-w-0 items-center gap-1.5 text-ntrip-ink/62">
+                        <Wifi className="size-[clamp(0.75rem,2.2vw,0.875rem)] shrink-0" />
+                        <span className="truncate">Network</span>
                     </dt>
-                    <dd className="max-w-[65%] truncate font-semibold">
+
+                    <dd className="max-w-[65%] truncate text-right font-semibold">
                         {station.networkType} · {station.ipAddress ?? 'Unknown'}
                     </dd>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                    <dt className="flex items-center gap-2 text-ntrip-ink/62">
-                        <Gauge className="size-3.5" />
-                        Temperature
+                <div className="flex items-center justify-between gap-2">
+                    <dt className="flex min-w-0 items-center gap-1.5 text-ntrip-ink/62">
+                        <Gauge className="size-[clamp(0.75rem,2.2vw,0.875rem)] shrink-0" />
+                        <span className="truncate">Temperature</span>
                     </dt>
-                    <dd className="font-semibold tabular-nums">
+
+                    <dd className="shrink-0 font-semibold tabular-nums">
                         {station.temperatureC ?? '—'} °C
                     </dd>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                    <dt className="flex items-center gap-2 text-ntrip-ink/62">
-                        <Database className="size-3.5" />
-                        Free heap
+                <div className="flex items-center justify-between gap-2">
+                    <dt className="flex min-w-0 items-center gap-1.5 text-ntrip-ink/62">
+                        <Database className="size-[clamp(0.75rem,2.2vw,0.875rem)] shrink-0" />
+                        <span className="truncate">Free heap</span>
                     </dt>
-                    <dd className="font-semibold tabular-nums">
+
+                    <dd className="shrink-0 font-semibold tabular-nums">
                         {formatHeap(station.freeHeapBytes)}
                     </dd>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                    <dt className="flex items-center gap-2 text-ntrip-ink/62">
-                        <Clock3 className="size-3.5" />
-                        Last telemetry
+                <div className="flex items-center justify-between gap-2">
+                    <dt className="flex min-w-0 items-center gap-1.5 text-ntrip-ink/62">
+                        <Clock3 className="size-[clamp(0.75rem,2.2vw,0.875rem)] shrink-0" />
+                        <span className="truncate">Last telemetry</span>
                     </dt>
-                    <dd className="font-semibold">
+
+                    <dd className="shrink-0 font-semibold">
                         {formatLastSeen(station.lastSeenAt)}
                     </dd>
                 </div>
             </dl>
 
-            <div className="border-t border-ntrip-ink/8 p-2 sm:p-3">
+            <div className="border-t border-ntrip-ink/8 p-[clamp(0.375rem,1.5vw,0.75rem)]">
                 <Button
                     asChild
-                    className="h-8 w-full rounded-xl bg-ntrip-ink text-[11px] text-ntrip-cloud hover:bg-ntrip-ink/90 sm:h-9 sm:text-xs"
+                    className="min-h-9 w-full rounded-[clamp(0.5rem,1.5vw,0.75rem)] bg-ntrip-ink px-3 text-xs font-medium text-ntrip-cloud hover:bg-ntrip-ink/90"
                 >
                     <Link href={`/stations/${station.id}`}>
                         Open station
