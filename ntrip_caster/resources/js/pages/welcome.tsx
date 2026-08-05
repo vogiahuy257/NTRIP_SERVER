@@ -8,8 +8,10 @@ import {
     MousePointer2,
     Network,
     RadioTower,
+    Satellite,
     ServerCog,
     ShieldCheck,
+    Waves,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -17,7 +19,14 @@ import type { WelcomeSceneNode } from '@/components/welcome-3d/welcome-model-ass
 import { WelcomeThreeScene } from '@/components/welcome-3d/welcome-three-scene';
 import { dashboard, login, register } from '@/routes';
 
-const NODE_ORDER: WelcomeSceneNode[] = ['base', 'caster', 'uav', 'rover'];
+const NODE_ORDER: WelcomeSceneNode[] = [
+    'satellite',
+    'base',
+    'caster',
+    'uav',
+    'rover',
+    'usv',
+];
 
 const NODE_CONTENT: Record<
     WelcomeSceneNode,
@@ -28,33 +37,47 @@ const NODE_CONTENT: Record<
         description: string;
     }
 > = {
-    base: {
+    satellite: {
         index: '01',
-        label: 'RTK base station',
-        title: 'Correction data begins at the source.',
+        label: 'GNSS satellite',
+        title: 'Positioning signals begin in orbit.',
         description:
-            'Distributed GNSS stations generate RTCM observations and publish them continuously to the caster.',
+            'Satellite constellations broadcast GNSS signals to the RTK base, UAV, rover and autonomous surface vessel.',
+    },
+    base: {
+        index: '02',
+        label: 'RTK base station',
+        title: 'A known reference turns observations into corrections.',
+        description:
+            'The reference station compares satellite measurements with its surveyed position and generates RTCM corrections.',
     },
     caster: {
-        index: '02',
+        index: '03',
         label: 'NTRIP Caster',
-        title: 'One control plane for every stream.',
+        title: 'One control plane routes every correction stream.',
         description:
-            'Authenticate sources, organize mountpoints, monitor traffic and recover stalled correction streams.',
+            'The caster authenticates sources, organizes mountpoints, monitors traffic and distributes RTCM data in realtime.',
     },
     uav: {
-        index: '03',
+        index: '04',
         label: 'UAV client',
         title: 'Precision correction delivered in flight.',
         description:
-            'UAV clients receive low-latency RTCM data for stable centimeter-level navigation and mission execution.',
+            'The UAV combines direct GNSS signals with low-latency RTCM data for centimeter-level navigation and mission execution.',
     },
     rover: {
-        index: '04',
+        index: '05',
         label: 'Autonomous rover',
-        title: 'Reliable positioning across the network.',
+        title: 'Reliable positioning across the ground network.',
         description:
-            'Rovers report GGA position, receive the appropriate correction source and remain visible in realtime.',
+            'The rover reports GGA position, receives the appropriate correction source and remains visible in realtime.',
+    },
+    usv: {
+        index: '06',
+        label: 'Autonomous USV',
+        title: 'RTK precision extends onto the water.',
+        description:
+            'The unmanned surface vessel receives GNSS and RTCM data for stable marine navigation, mapping and autonomous missions.',
     },
 };
 
@@ -65,31 +88,50 @@ const NODE_VISUALS: Record<
         role: string;
         metric: string;
         signal: string;
+        path: string;
     }
 > = {
+    satellite: {
+        icon: Satellite,
+        role: 'Orbit layer',
+        metric: 'GNSS broadcast',
+        signal: 'Multi-constellation downlink',
+        path: 'GNSS signal',
+    },
     base: {
         icon: RadioTower,
-        role: 'Source node',
+        role: 'Reference source',
         metric: 'RTCM observations',
-        signal: 'Continuous source',
+        signal: 'Continuous correction source',
+        path: 'Satellite → Base',
     },
     caster: {
         icon: ServerCog,
         role: 'Control plane',
         metric: 'Mountpoint routing',
         signal: 'Realtime orchestration',
+        path: 'Base → Caster',
     },
     uav: {
         icon: Network,
         role: 'Air client',
         metric: 'Low-latency correction',
         signal: 'Precision in flight',
+        path: 'Caster → UAV',
     },
     rover: {
         icon: LocateFixed,
         role: 'Ground client',
         metric: 'GGA-aware delivery',
         signal: 'Centimeter positioning',
+        path: 'Caster → Rover',
+    },
+    usv: {
+        icon: Waves,
+        role: 'Marine client',
+        metric: 'RTK marine navigation',
+        signal: 'Precision on water',
+        path: 'Caster → USV',
     },
 };
 
@@ -116,7 +158,7 @@ const CAPABILITIES = [
         icon: LocateFixed,
         title: 'Adaptive correction',
         description:
-            'Prepare for automatic mountpoint selection from rover GGA location.',
+            'Prepare automatic source selection for ground, air and marine clients.',
     },
     {
         icon: Database,
@@ -181,88 +223,64 @@ export default function Welcome() {
             }
 
             /*
-            * Dùng vùng 52% chiều cao viewport làm điểm kích hoạt.
-            * Thẻ gần đường này nhất sẽ trở thành active.
-            */
+             * Dùng vùng 52% chiều cao viewport làm điểm kích hoạt.
+             * Thẻ gần đường này nhất sẽ trở thành active.
+             */
             const activationLine = window.innerHeight * 0.52;
 
             const nearestStep = steps
                 .map((element) => {
                     const bounds = element.getBoundingClientRect();
 
-                    const center =
-                        bounds.top + bounds.height / 2;
+                    const center = bounds.top + bounds.height / 2;
 
                     return {
                         element,
-                        distance: Math.abs(
-                            center - activationLine,
-                        ),
+                        distance: Math.abs(center - activationLine),
                     };
                 })
-                .sort(
-                    (left, right) =>
-                        left.distance - right.distance,
-                )[0];
+                .sort((left, right) => left.distance - right.distance)[0];
 
             if (!nearestStep) {
                 return;
             }
 
-            const node =
-                nearestStep.element.dataset
-                    .welcomeArchitectureStep;
+            const node = nearestStep.element.dataset.welcomeArchitectureStep;
 
             if (
+                node === 'satellite' ||
                 node === 'base' ||
                 node === 'caster' ||
                 node === 'uav' ||
-                node === 'rover'
+                node === 'rover' ||
+                node === 'usv'
             ) {
                 setActiveNode(node);
             }
         };
 
         const scheduleUpdate = (): void => {
-            window.cancelAnimationFrame(
-                animationFrame,
-            );
+            window.cancelAnimationFrame(animationFrame);
 
-            animationFrame =
-                window.requestAnimationFrame(
-                    updateActiveArchitectureNode,
-                );
+            animationFrame = window.requestAnimationFrame(
+                updateActiveArchitectureNode,
+            );
         };
 
-        window.addEventListener(
-            'scroll',
-            scheduleUpdate,
-            {
-                passive: true,
-            },
-        );
+        window.addEventListener('scroll', scheduleUpdate, {
+            passive: true,
+        });
 
-        window.addEventListener(
-            'resize',
-            scheduleUpdate,
-        );
+        window.addEventListener('resize', scheduleUpdate);
 
         scheduleUpdate();
 
         return () => {
-            window.cancelAnimationFrame(
-                animationFrame,
-            );
+            window.cancelAnimationFrame(animationFrame);
 
-            window.removeEventListener(
-                'scroll',
-                scheduleUpdate,
-            );
+            window.removeEventListener('scroll', scheduleUpdate);
 
-            window.removeEventListener(
-                'resize',
-                scheduleUpdate,
-            );
+            window.removeEventListener('resize', scheduleUpdate);
         };
     }, []);
 
@@ -515,7 +533,7 @@ export default function Welcome() {
                     <section
                         id="architecture"
                         data-welcome-architecture
-                        className="relative h-[570svh] scroll-mt-20 sm:h-[590svh] md:h-[610svh] lg:h-[650svh]"
+                        className="relative h-[820svh] scroll-mt-20 sm:h-[850svh] md:h-[880svh] lg:h-[940svh]"
                     >
                         <div className="sticky top-0 flex min-h-[100svh] items-end overflow-hidden px-3 pt-24 pb-3 sm:items-center sm:px-6 sm:pt-28 sm:pb-6 md:px-8 lg:px-10">
                             <div className="mx-auto grid w-full max-w-[1440px] items-end gap-6 lg:grid-cols-[minmax(21rem,35rem)_minmax(0,1fr)] lg:items-center xl:grid-cols-[minmax(22rem,36rem)_minmax(0,1fr)]">
@@ -532,7 +550,8 @@ export default function Welcome() {
                                                         Architecture sequence
                                                     </p>
                                                     <p className="mt-0.5 truncate text-xs font-semibold text-black/72 sm:text-[13px]">
-                                                        Source → Caster → Clients
+                                                        Satellite → Base →
+                                                        Caster → Clients
                                                     </p>
                                                 </div>
                                             </div>
@@ -543,7 +562,13 @@ export default function Welcome() {
                                                 </p>
                                                 <p className="mt-0.5 font-mono text-sm font-semibold tabular-nums sm:text-base">
                                                     {activeContent.index}
-                                                    <span className="text-black/25"> / 04</span>
+                                                    <span className="text-black/25">
+                                                        {' '}
+                                                        /{' '}
+                                                        {String(
+                                                            NODE_ORDER.length,
+                                                        ).padStart(2, '0')}
+                                                    </span>
                                                 </p>
                                             </div>
                                         </div>
@@ -563,7 +588,12 @@ export default function Welcome() {
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="inline-flex min-w-0 items-center gap-2 rounded-full border border-black/[0.07] bg-black/[0.035] py-1.5 pr-3 pl-1.5">
                                                         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-black text-white">
-                                                            <ActiveNodeIcon className="size-3.5" strokeWidth={1.8} />
+                                                            <ActiveNodeIcon
+                                                                className="size-3.5"
+                                                                strokeWidth={
+                                                                    1.8
+                                                                }
+                                                            />
                                                         </span>
                                                         <span className="truncate text-[10px] font-bold tracking-[0.12em] text-black/50 uppercase">
                                                             {activeVisual.role}
@@ -584,7 +614,9 @@ export default function Welcome() {
                                                         {activeContent.title}
                                                     </p>
                                                     <p className="mt-2 hidden max-w-lg text-xs leading-5 text-black/42 min-[380px]:block sm:text-[13px] sm:leading-6">
-                                                        {activeContent.description}
+                                                        {
+                                                            activeContent.description
+                                                        }
                                                     </p>
                                                 </div>
 
@@ -594,7 +626,9 @@ export default function Welcome() {
                                                             Runtime role
                                                         </p>
                                                         <p className="mt-1 truncate text-xs font-semibold text-black/70 sm:text-sm">
-                                                            {activeVisual.metric}
+                                                            {
+                                                                activeVisual.metric
+                                                            }
                                                         </p>
                                                     </div>
                                                     <div className="rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
@@ -602,7 +636,7 @@ export default function Welcome() {
                                                             Active path
                                                         </p>
                                                         <p className="mt-1 truncate text-xs font-semibold text-black/70 sm:text-sm">
-                                                            RTCM correction
+                                                            {activeVisual.path}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -610,31 +644,45 @@ export default function Welcome() {
                                         </div>
 
                                         <div className="border-t border-black/[0.06] bg-white/38 px-3 py-3 sm:px-4 sm:py-4">
-                                            <div className="relative grid grid-cols-4 gap-1.5 lg:grid-cols-1 lg:gap-1">
+                                            <div className="relative grid grid-cols-3 gap-1.5 sm:grid-cols-6 lg:grid-cols-1 lg:gap-1">
                                                 <span
                                                     aria-hidden="true"
                                                     className="absolute top-5 right-5 left-5 hidden h-px bg-black/[0.08] sm:block lg:top-5 lg:right-auto lg:bottom-5 lg:left-5 lg:h-auto lg:w-px"
                                                 />
 
                                                 {NODE_ORDER.map((node) => {
-                                                    const content = NODE_CONTENT[node];
-                                                    const visual = NODE_VISUALS[node];
+                                                    const content =
+                                                        NODE_CONTENT[node];
+                                                    const visual =
+                                                        NODE_VISUALS[node];
                                                     const Icon = visual.icon;
-                                                    const selected = activeNode === node;
+                                                    const selected =
+                                                        activeNode === node;
                                                     const passed =
-                                                        NODE_ORDER.indexOf(node) <=
-                                                        activeNodeIndex;
+                                                        NODE_ORDER.indexOf(
+                                                            node,
+                                                        ) <= activeNodeIndex;
 
                                                     return (
                                                         <button
                                                             key={node}
                                                             type="button"
-                                                            aria-pressed={selected}
+                                                            aria-pressed={
+                                                                selected
+                                                            }
                                                             onClick={() => {
-                                                                setActiveNode(node);
-                                                                scrollToArchitectureNode(node);
+                                                                setActiveNode(
+                                                                    node,
+                                                                );
+                                                                scrollToArchitectureNode(
+                                                                    node,
+                                                                );
                                                             }}
-                                                            onFocus={() => setActiveNode(node)}
+                                                            onFocus={() =>
+                                                                setActiveNode(
+                                                                    node,
+                                                                )
+                                                            }
                                                             className={`group relative z-10 flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-1.5 py-2 text-left transition-all duration-500 focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:min-h-14 sm:px-2 lg:min-h-12 lg:justify-start lg:border-transparent lg:px-2.5 ${
                                                                 selected
                                                                     ? 'border-black/10 bg-black text-white shadow-[0_14px_34px_rgba(0,0,0,0.16)] lg:translate-x-1'
@@ -650,13 +698,24 @@ export default function Welcome() {
                                                                           : 'border-black/[0.08] bg-[#f4f4f1] text-black/32'
                                                                 }`}
                                                             >
-                                                                <span className="sm:hidden">{content.index}</span>
-                                                                <Icon className="hidden size-3.5 sm:block" strokeWidth={1.8} />
+                                                                <span className="sm:hidden">
+                                                                    {
+                                                                        content.index
+                                                                    }
+                                                                </span>
+                                                                <Icon
+                                                                    className="hidden size-3.5 sm:block"
+                                                                    strokeWidth={
+                                                                        1.8
+                                                                    }
+                                                                />
                                                             </span>
 
                                                             <span className="hidden min-w-0 sm:block lg:flex-1">
                                                                 <span className="block truncate text-[11px] font-semibold sm:text-xs">
-                                                                    {content.label}
+                                                                    {
+                                                                        content.label
+                                                                    }
                                                                 </span>
                                                                 <span
                                                                     className={`mt-0.5 hidden truncate text-[10px] lg:block ${
@@ -665,7 +724,9 @@ export default function Welcome() {
                                                                             : 'text-black/32'
                                                                     }`}
                                                                 >
-                                                                    {visual.role}
+                                                                    {
+                                                                        visual.role
+                                                                    }
                                                                 </span>
                                                             </span>
                                                         </button>
@@ -677,7 +738,9 @@ export default function Welcome() {
                                                 <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-black/[0.07]">
                                                     <div
                                                         className="h-full rounded-full bg-black transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                                                        style={{ width: `${architectureProgress}%` }}
+                                                        style={{
+                                                            width: `${architectureProgress}%`,
+                                                        }}
                                                     />
                                                 </div>
                                                 <span className="shrink-0 text-[9px] font-bold tracking-[0.12em] text-black/30 uppercase sm:text-[10px]">
@@ -688,7 +751,10 @@ export default function Welcome() {
                                     </div>
                                 </div>
 
-                                <div className="pointer-events-none hidden min-h-[30rem] lg:block" aria-hidden="true">
+                                <div
+                                    className="pointer-events-none hidden min-h-[30rem] lg:block"
+                                    aria-hidden="true"
+                                >
                                     <div
                                         key={`scene-label-${activeNode}`}
                                         className="ntrip-label-enter absolute right-[clamp(2.5rem,6vw,7rem)] bottom-[clamp(3.5rem,9vh,7rem)] max-w-[17rem] text-right"
@@ -738,13 +804,14 @@ export default function Welcome() {
                                 </h2>
                             </div>
                             <p className="max-w-2xl text-sm leading-6 text-black/48 sm:text-base sm:leading-7 lg:justify-self-end lg:text-lg lg:leading-8">
-                                Every operating layer shares one visual language,
-                                one realtime runtime and one source of truth—from
-                                the correction source to each connected vehicle.
+                                Every operating layer shares one visual
+                                language, one realtime runtime and one source of
+                                truth—from the correction source to each
+                                connected vehicle.
                             </p>
                         </div>
 
-                        <div className="mt-9 grid auto-rows-[minmax(12rem,auto)] gap-3 sm:grid-cols-2 sm:gap-4 lg:mt-12 lg:grid-cols-12 lg:auto-rows-[14rem]">
+                        <div className="mt-9 grid auto-rows-[minmax(12rem,auto)] gap-3 sm:grid-cols-2 sm:gap-4 lg:mt-12 lg:auto-rows-[14rem] lg:grid-cols-12">
                             {CAPABILITIES.map((capability, index) => {
                                 const Icon = capability.icon;
                                 const layout = [
@@ -785,11 +852,16 @@ export default function Welcome() {
                                                         : 'border-black/[0.06] bg-black/[0.04] text-black/65'
                                                 }`}
                                             >
-                                                <Icon className="size-[1.15rem]" strokeWidth={1.8} />
+                                                <Icon
+                                                    className="size-[1.15rem]"
+                                                    strokeWidth={1.8}
+                                                />
                                             </span>
 
                                             <div className="mt-auto pt-8">
-                                                <h3 className={`font-semibold tracking-[-0.025em] ${featured ? 'text-2xl sm:text-3xl' : 'text-base sm:text-lg'}`}>
+                                                <h3
+                                                    className={`font-semibold tracking-[-0.025em] ${featured ? 'text-2xl sm:text-3xl' : 'text-base sm:text-lg'}`}
+                                                >
                                                     {capability.title}
                                                 </h3>
                                                 <p
@@ -803,7 +875,9 @@ export default function Welcome() {
                                                 </p>
                                             </div>
 
-                                            <div className={`relative mt-6 h-px overflow-hidden ${featured ? 'bg-white/10' : 'bg-black/[0.07]'}`}>
+                                            <div
+                                                className={`relative mt-6 h-px overflow-hidden ${featured ? 'bg-white/10' : 'bg-black/[0.07]'}`}
+                                            >
                                                 <span
                                                     className={`ntrip-signal-sweep absolute inset-y-0 left-0 w-1/3 ${featured ? 'bg-white/75' : 'bg-black/55'}`}
                                                 />
@@ -827,20 +901,33 @@ export default function Welcome() {
                                         Production runtime
                                     </div>
                                     <h2 className="mt-5 max-w-[12ch] text-[clamp(2.5rem,10vw,5rem)] leading-[0.93] font-semibold tracking-[-0.065em]">
-                                        One control plane. Every precision client.
+                                        One control plane. Every precision
+                                        client.
                                     </h2>
                                     <p className="mt-5 max-w-2xl text-sm leading-6 text-white/50 sm:text-base sm:leading-7 lg:text-lg lg:leading-8">
-                                        Laravel, React, PostgreSQL, Redis, Reverb
-                                        and the NTRIP TCP service operate as one
-                                        observable platform.
+                                        Laravel, React, PostgreSQL, Redis,
+                                        Reverb and the NTRIP TCP service operate
+                                        as one observable platform.
                                     </p>
                                 </div>
 
                                 <div className="grid gap-2.5">
                                     {[
-                                        ['01', 'Source layer', 'RTK base stations publish continuous RTCM observations.'],
-                                        ['02', 'Control layer', 'The caster authenticates, routes and monitors every stream.'],
-                                        ['03', 'Client layer', 'UAVs and rovers receive precise corrections in realtime.'],
+                                        [
+                                            '01',
+                                            'Source layer',
+                                            'RTK base stations publish continuous RTCM observations.',
+                                        ],
+                                        [
+                                            '02',
+                                            'Control layer',
+                                            'The caster authenticates, routes and monitors every stream.',
+                                        ],
+                                        [
+                                            '03',
+                                            'Client layer',
+                                            'UAVs and rovers receive precise corrections in realtime.',
+                                        ],
                                     ].map(([index, title, description]) => (
                                         <div
                                             key={index}
@@ -850,8 +937,12 @@ export default function Welcome() {
                                                 {index}
                                             </span>
                                             <div>
-                                                <p className="text-sm font-semibold">{title}</p>
-                                                <p className="mt-1 text-xs leading-5 text-white/38">{description}</p>
+                                                <p className="text-sm font-semibold">
+                                                    {title}
+                                                </p>
+                                                <p className="mt-1 text-xs leading-5 text-white/38">
+                                                    {description}
+                                                </p>
                                             </div>
                                         </div>
                                     ))}
@@ -859,17 +950,29 @@ export default function Welcome() {
                             </div>
 
                             <div className="relative overflow-hidden border-t border-white/10 px-5 py-5 sm:px-8 lg:px-14">
-                                <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.055] to-transparent ntrip-signal-sweep" aria-hidden="true" />
+                                <div
+                                    className="ntrip-signal-sweep absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/[0.055] to-transparent"
+                                    aria-hidden="true"
+                                />
                                 <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
-                                        <p className="text-xs font-semibold text-white/78">Ready to operate the network?</p>
-                                        <p className="mt-1 text-xs text-white/36">Open the realtime dashboard or create your first account.</p>
+                                        <p className="text-xs font-semibold text-white/78">
+                                            Ready to operate the network?
+                                        </p>
+                                        <p className="mt-1 text-xs text-white/36">
+                                            Open the realtime dashboard or
+                                            create your first account.
+                                        </p>
                                     </div>
                                     <Link
-                                        href={auth.user ? dashboard() : register()}
+                                        href={
+                                            auth.user ? dashboard() : register()
+                                        }
                                         className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-white/90 focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-black focus-visible:outline-none sm:w-auto"
                                     >
-                                        {auth.user ? 'Open dashboard' : 'Create an account'}
+                                        {auth.user
+                                            ? 'Open dashboard'
+                                            : 'Create an account'}
                                         <ArrowRight className="size-4" />
                                     </Link>
                                 </div>
@@ -880,13 +983,39 @@ export default function Welcome() {
                     <footer className="mx-auto max-w-[1440px] px-4 pb-6 sm:px-6 sm:pb-8 md:px-8 lg:px-10">
                         <div className="grid gap-4 border-t border-black/[0.08] py-6 text-xs text-black/40 sm:grid-cols-[1fr_auto] sm:items-center">
                             <div>
-                                <p className="font-semibold text-black/62">NTRIP Caster</p>
-                                <p className="mt-1">Realtime GNSS correction infrastructure.</p>
+                                <p className="font-semibold text-black/62">
+                                    NTRIP Caster
+                                </p>
+                                <p className="mt-1">
+                                    Realtime GNSS correction infrastructure.
+                                </p>
                             </div>
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end">
-                                <button type="button" onClick={() => scrollToSection('architecture')} className="transition hover:text-black">Architecture</button>
-                                <button type="button" onClick={() => scrollToSection('capabilities')} className="transition hover:text-black">Capabilities</button>
-                                <button type="button" onClick={() => scrollToSection('platform')} className="transition hover:text-black">Platform</button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        scrollToSection('architecture')
+                                    }
+                                    className="transition hover:text-black"
+                                >
+                                    Architecture
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        scrollToSection('capabilities')
+                                    }
+                                    className="transition hover:text-black"
+                                >
+                                    Capabilities
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => scrollToSection('platform')}
+                                    className="transition hover:text-black"
+                                >
+                                    Platform
+                                </button>
                             </div>
                         </div>
                     </footer>

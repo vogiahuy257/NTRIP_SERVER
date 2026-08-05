@@ -1,4 +1,5 @@
-export type WelcomeSceneNode = 'base' | 'caster' | 'uav' | 'rover';
+export type WelcomeSceneNode =
+    'satellite' | 'base' | 'caster' | 'uav' | 'rover' | 'usv';
 
 export type WelcomeReplaceableModelNode = WelcomeSceneNode;
 
@@ -27,6 +28,14 @@ export const WELCOME_MODEL_ASSETS: Record<
     WelcomeReplaceableModelNode,
     WelcomeModelAsset
 > = {
+    satellite: {
+        url: '/models/satellite.glb',
+        targetSize: 3.8,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1,
+    },
+
     base: {
         url: '/models/rtk-base.glb',
         targetSize: 2.6,
@@ -54,6 +63,14 @@ export const WELCOME_MODEL_ASSETS: Record<
     rover: {
         url: '/models/rover.glb',
         targetSize: 3.2,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: 1,
+    },
+
+    usv: {
+        url: '/models/usv.glb',
+        targetSize: 3.6,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,

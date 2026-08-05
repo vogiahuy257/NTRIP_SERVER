@@ -30,13 +30,16 @@ type DataPath = {
     mesh: THREE.Mesh<THREE.TubeGeometry, THREE.MeshBasicMaterial>;
     particles: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>[];
     speed: number;
+    layer: 'gnss' | 'rtcm';
 };
 
 const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
+    satellite: new THREE.Vector3(-0.5, 7.0, -3.6),
     base: new THREE.Vector3(-4.25, -0.1, 0.25),
     caster: new THREE.Vector3(0, 0.15, -0.2),
     uav: new THREE.Vector3(4.15, 1.55, -1.15),
     rover: new THREE.Vector3(4.15, -0.3, 2.25),
+    usv: new THREE.Vector3(5.2, -0.18, 5.0),
 };
 
 type ArchitectureFocusSettings = {
@@ -80,6 +83,13 @@ const ARCHITECTURE_FOCUS_SETTINGS: Record<
     WelcomeSceneNode,
     ArchitectureFocusSettings
 > = {
+    satellite: {
+        distance: 12.8,
+        targetHeight: 0.25,
+        horizontalOffset: 1.05,
+        fov: 39,
+    },
+
     base: {
         distance: 10.5,
         targetHeight: 1.15,
@@ -104,6 +114,13 @@ const ARCHITECTURE_FOCUS_SETTINGS: Record<
     rover: {
         distance: 10.5,
         targetHeight: 0.9,
+        horizontalOffset: 0.95,
+        fov: 37,
+    },
+
+    usv: {
+        distance: 10.9,
+        targetHeight: 0.7,
         horizontalOffset: 0.95,
         fov: 37,
     },
@@ -140,10 +157,7 @@ function getArchitectureFocusFrame(
 
     const target = anchor
         .clone()
-        .addScaledVector(
-            ARCHITECTURE_SCREEN_RIGHT,
-            -settings.horizontalOffset,
-        );
+        .addScaledVector(ARCHITECTURE_SCREEN_RIGHT, -settings.horizontalOffset);
 
     return {
         position,
@@ -172,40 +186,48 @@ type ResponsiveSceneProfile = {
 const CAMERA_COMPACT = [
     new THREE.Vector3(10.8, 7.4, 23.5),
     new THREE.Vector3(8.9, 6.2, 18.6),
+    new THREE.Vector3(3.6, 10.4, 16.8),
     new THREE.Vector3(-0.4, 5.0, 14.8),
     new THREE.Vector3(0.3, 4.8, 12.8),
     new THREE.Vector3(7.7, 5.5, 13.2),
     new THREE.Vector3(7.6, 4.0, 13.8),
+    new THREE.Vector3(8.8, 4.2, 15.2),
     new THREE.Vector3(9.6, 8.1, 21.0),
 ];
 
 const CAMERA_MOBILE = [
     new THREE.Vector3(10.2, 6.9, 20.8),
     new THREE.Vector3(8.4, 5.7, 16.5),
+    new THREE.Vector3(3.3, 9.5, 14.9),
     new THREE.Vector3(-0.8, 4.6, 12.6),
     new THREE.Vector3(0.2, 4.4, 10.9),
     new THREE.Vector3(7.3, 5.0, 11.2),
     new THREE.Vector3(7.2, 3.7, 11.8),
+    new THREE.Vector3(8.3, 3.9, 13.0),
     new THREE.Vector3(9.0, 7.4, 18.2),
 ];
 
 const CAMERA_TABLET = [
     new THREE.Vector3(9.8, 6.2, 17.8),
     new THREE.Vector3(7.8, 5.1, 13.8),
+    new THREE.Vector3(3.0, 8.7, 12.8),
     new THREE.Vector3(-1.1, 4.0, 10.7),
     new THREE.Vector3(0.2, 4.0, 9.3),
     new THREE.Vector3(7.1, 4.5, 9.8),
     new THREE.Vector3(7.0, 3.4, 10.3),
+    new THREE.Vector3(8.0, 3.5, 11.5),
     new THREE.Vector3(8.5, 6.8, 15.8),
 ];
 
 const CAMERA_DESKTOP = [
     new THREE.Vector3(10.2, 5.9, 18.8),
     new THREE.Vector3(8.0, 4.9, 13.8),
+    new THREE.Vector3(2.8, 8.2, 11.9),
     new THREE.Vector3(-1.3, 3.6, 9.8),
     new THREE.Vector3(0.2, 3.8, 8.8),
     new THREE.Vector3(7.1, 4.2, 9.4),
     new THREE.Vector3(7.0, 3.3, 9.8),
+    new THREE.Vector3(7.9, 3.4, 10.9),
     new THREE.Vector3(8.2, 6.4, 14.8),
 ];
 
@@ -215,6 +237,8 @@ const CAMERA_TARGETS = [
     // Camera tiến vào giữa network trước khi focus từng node.
     new THREE.Vector3(0.2, 0.5, 0.25),
 
+    NODE_POSITIONS.satellite.clone().add(new THREE.Vector3(0, 0.25, 0)),
+
     NODE_POSITIONS.base.clone().add(new THREE.Vector3(0, 1.05, 0)),
 
     NODE_POSITIONS.caster.clone().add(new THREE.Vector3(0, 1.15, 0)),
@@ -222,6 +246,8 @@ const CAMERA_TARGETS = [
     NODE_POSITIONS.uav.clone().add(new THREE.Vector3(0, 0.1, 0)),
 
     NODE_POSITIONS.rover.clone().add(new THREE.Vector3(0, 0.85, 0)),
+
+    NODE_POSITIONS.usv.clone().add(new THREE.Vector3(0, 0.7, 0)),
 
     new THREE.Vector3(0.25, 0.5, 0.25),
 ];
@@ -303,10 +329,12 @@ function getResponsiveSceneProfile(width: number): ResponsiveSceneProfile {
 }
 
 const INTERACTIVE_NODE_ORDER: WelcomeSceneNode[] = [
+    'satellite',
     'base',
     'caster',
     'uav',
     'rover',
+    'usv',
 ];
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -566,8 +594,108 @@ function createRover(): THREE.Group {
     return group;
 }
 
+function createSatellite(): THREE.Group {
+    const group = new THREE.Group();
+    const body = createStandardMaterial(0x202020, {
+        roughness: 0.36,
+        metalness: 0.65,
+    });
+    const panel = createStandardMaterial(0x444444, {
+        roughness: 0.4,
+        metalness: 0.42,
+    });
+    const white = createStandardMaterial(0xf1f1ed, {
+        roughness: 0.28,
+        metalness: 0.12,
+    });
+
+    addMesh(group, new THREE.BoxGeometry(0.9, 0.75, 0.9), body, [0, 0, 0]);
+    addMesh(
+        group,
+        new THREE.BoxGeometry(2.2, 0.08, 0.92),
+        panel,
+        [-1.55, 0, 0],
+    );
+    addMesh(group, new THREE.BoxGeometry(2.2, 0.08, 0.92), panel, [1.55, 0, 0]);
+
+    for (const x of [-2.2, -1.5, -0.9, 0.9, 1.5, 2.2]) {
+        addMesh(group, new THREE.BoxGeometry(0.02, 0.1, 0.94), white, [
+            x,
+            0.01,
+            0,
+        ]);
+    }
+
+    addMesh(
+        group,
+        new THREE.CylinderGeometry(0.08, 0.08, 0.85, 16),
+        body,
+        [0, -0.75, 0],
+    );
+    addMesh(
+        group,
+        new THREE.SphereGeometry(0.42, 24, 14),
+        white,
+        [0, -1.15, 0],
+        [Math.PI, 0, 0],
+        [1, 0.45, 1],
+    );
+
+    group.rotation.z = -0.08;
+
+    return group;
+}
+
+function createUsv(): THREE.Group {
+    const group = new THREE.Group();
+    const hull = createStandardMaterial(0x111111, {
+        roughness: 0.42,
+        metalness: 0.5,
+    });
+    const graphite = createStandardMaterial(0x444444, {
+        roughness: 0.56,
+        metalness: 0.35,
+    });
+    const white = createStandardMaterial(0xefefeb, {
+        roughness: 0.34,
+        metalness: 0.08,
+    });
+
+    addMesh(group, new THREE.BoxGeometry(2.7, 0.48, 1.15), hull, [0, 0.34, 0]);
+    addMesh(
+        group,
+        new THREE.BoxGeometry(2.35, 0.32, 0.92),
+        hull,
+        [0.12, 0.05, 0],
+        [0, 0, 0],
+        [1, 0.78, 1],
+    );
+    addMesh(
+        group,
+        new THREE.BoxGeometry(1.15, 0.52, 0.78),
+        graphite,
+        [0.15, 0.85, 0],
+    );
+    addMesh(
+        group,
+        new THREE.CylinderGeometry(0.04, 0.05, 1.05, 12),
+        graphite,
+        [0.35, 1.65, 0],
+    );
+    addMesh(
+        group,
+        new THREE.CylinderGeometry(0.25, 0.27, 0.13, 22),
+        white,
+        [0.35, 2.2, 0],
+    );
+
+    return group;
+}
+
 function createProceduralNode(id: WelcomeSceneNode): THREE.Group {
     switch (id) {
+        case 'satellite':
+            return createSatellite();
         case 'base':
             return createBaseStation();
         case 'caster':
@@ -576,6 +704,8 @@ function createProceduralNode(id: WelcomeSceneNode): THREE.Group {
             return createUav();
         case 'rover':
             return createRover();
+        case 'usv':
+            return createUsv();
     }
 }
 
@@ -607,8 +737,18 @@ function createInteractiveNode(id: WelcomeSceneNode): InteractiveNode {
     );
 
     ring.rotation.x = -Math.PI / 2;
-    ring.position.y = id === 'uav' ? -1.45 : 0.02;
-    ring.scale.setScalar(id === 'caster' ? 1.55 : id === 'uav' ? 1.8 : 1.35);
+    ring.position.y = id === 'satellite' ? -1.3 : id === 'uav' ? -1.45 : 0.02;
+    ring.scale.setScalar(
+        id === 'satellite'
+            ? 1.9
+            : id === 'caster'
+              ? 1.55
+              : id === 'uav'
+                ? 1.8
+                : id === 'usv'
+                  ? 1.65
+                  : 1.35,
+    );
     slot.add(ring);
 
     return {
@@ -624,35 +764,44 @@ function createPath(
     to: WelcomeSceneNode,
     points: THREE.Vector3[],
     speed: number,
+    layer: DataPath['layer'] = 'rtcm',
 ): { mesh: THREE.Mesh; runtime: DataPath } {
     const curve = new THREE.CatmullRomCurve3(points);
+    const isGnss = layer === 'gnss';
     const material = new THREE.MeshBasicMaterial({
-        color: 0x5c5c5c,
+        color: isGnss ? 0x8a8a84 : 0x4a4a47,
         transparent: true,
-        opacity: 0.5,
+        opacity: isGnss ? 0.34 : 0.52,
         depthWrite: false,
     });
     const mesh = new THREE.Mesh(
-        new THREE.TubeGeometry(curve, 72, 0.024, 8, false),
+        new THREE.TubeGeometry(
+            curve,
+            isGnss ? 56 : 72,
+            isGnss ? 0.012 : 0.024,
+            8,
+            false,
+        ),
         material,
     );
     const particles: DataPath['particles'] = [];
+    const particleCount = isGnss ? 4 : 5;
 
-    mesh.renderOrder = 4;
+    mesh.renderOrder = isGnss ? 3 : 4;
 
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < particleCount; index += 1) {
         const particle = new THREE.Mesh(
-            new THREE.SphereGeometry(0.075, 12, 8),
+            new THREE.SphereGeometry(isGnss ? 0.052 : 0.075, 12, 8),
             new THREE.MeshBasicMaterial({
-                color: 0x111111,
+                color: isGnss ? 0xf5f5f0 : 0x111111,
                 transparent: true,
-                opacity: 0.82,
+                opacity: isGnss ? 0.9 : 0.82,
                 depthWrite: false,
             }),
         );
 
-        particle.userData.pathOffset = index / 5;
-        particle.renderOrder = 5;
+        particle.userData.pathOffset = index / particleCount;
+        particle.renderOrder = isGnss ? 4 : 5;
         particles.push(particle);
     }
 
@@ -665,6 +814,7 @@ function createPath(
             mesh,
             particles,
             speed,
+            layer,
         },
     };
 }
@@ -726,10 +876,12 @@ function resolveNodeFromObject(
         const candidate = current.userData.welcomeSceneNode;
 
         if (
+            candidate === 'satellite' ||
             candidate === 'base' ||
             candidate === 'caster' ||
             candidate === 'uav' ||
-            candidate === 'rover'
+            candidate === 'rover' ||
+            candidate === 'usv'
         ) {
             return candidate;
         }
@@ -921,6 +1073,61 @@ export function WelcomeThreeScene({
         }
 
         const connections = [
+            // GNSS downlinks from orbit to every positioning receiver.
+            createPath(
+                'satellite',
+                'base',
+                [
+                    NODE_POSITIONS.satellite.clone(),
+                    new THREE.Vector3(-2.5, 4.8, -1.5),
+                    NODE_POSITIONS.base
+                        .clone()
+                        .add(new THREE.Vector3(0, 3.0, 0)),
+                ],
+                0.075,
+                'gnss',
+            ),
+            createPath(
+                'satellite',
+                'uav',
+                [
+                    NODE_POSITIONS.satellite.clone(),
+                    new THREE.Vector3(2.2, 5.6, -2.6),
+                    NODE_POSITIONS.uav
+                        .clone()
+                        .add(new THREE.Vector3(0, 0.3, 0)),
+                ],
+                0.095,
+                'gnss',
+            ),
+            createPath(
+                'satellite',
+                'rover',
+                [
+                    NODE_POSITIONS.satellite.clone(),
+                    new THREE.Vector3(1.9, 4.7, 0.2),
+                    NODE_POSITIONS.rover
+                        .clone()
+                        .add(new THREE.Vector3(0, 2.0, 0)),
+                ],
+                0.082,
+                'gnss',
+            ),
+            createPath(
+                'satellite',
+                'usv',
+                [
+                    NODE_POSITIONS.satellite.clone(),
+                    new THREE.Vector3(2.6, 4.6, 2.0),
+                    NODE_POSITIONS.usv
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.8, 0)),
+                ],
+                0.088,
+                'gnss',
+            ),
+
+            // RTCM correction transport through the NTRIP network.
             createPath(
                 'base',
                 'caster',
@@ -962,6 +1169,20 @@ export function WelcomeThreeScene({
                         .add(new THREE.Vector3(0, 1.0, 0)),
                 ],
                 0.09,
+            ),
+            createPath(
+                'caster',
+                'usv',
+                [
+                    NODE_POSITIONS.caster
+                        .clone()
+                        .add(new THREE.Vector3(0, 1.35, 0)),
+                    new THREE.Vector3(2.5, 1.25, 2.7),
+                    NODE_POSITIONS.usv
+                        .clone()
+                        .add(new THREE.Vector3(0, 0.9, 0)),
+                ],
+                0.1,
             ),
         ];
 
@@ -1027,9 +1248,9 @@ export function WelcomeThreeScene({
             );
         };
 
-        (Object.keys(WELCOME_MODEL_ASSETS) as WelcomeReplaceableModelNode[]).forEach(
-            loadRealModel,
-        );
+        (
+            Object.keys(WELCOME_MODEL_ASSETS) as WelcomeReplaceableModelNode[]
+        ).forEach(loadRealModel);
 
         const updateScrollTarget = (): void => {
             const hero = document.querySelector<HTMLElement>(
@@ -1087,18 +1308,20 @@ export function WelcomeThreeScene({
             const transitionEnd = architectureTop + viewportHeight * 0.08;
 
             /*
-             * Camera curve có 7 điểm:
+             * Camera curve có 9 điểm:
              *
              * 0/6 Hero overview
              * 1/6 Center overview
-             * 2/6 Base
-             * 3/6 Caster
-             * 4/6 UAV
-             * 5/6 Rover
-             * 6/6 Exit overview
+             * 2/8 Satellite
+             * 3/8 Base
+             * 4/8 Caster
+             * 5/8 UAV
+             * 6/8 Rover
+             * 7/8 USV
+             * 8/8 Exit overview
              */
-            const centerStage = 1 / 6;
-            const roverStage = 5 / 6;
+            const centerStage = 1 / 8;
+            const lastNodeStage = 7 / 8;
 
             if (window.scrollY <= transitionStart) {
                 scrollTarget = 0;
@@ -1122,7 +1345,7 @@ export function WelcomeThreeScene({
             /*
              * Architecture được pin trong 500svh.
              * Trong thời gian này camera lia tuần tự
-             * từ center → Base → Caster → UAV → Rover.
+             * từ center → Satellite → Base → Caster → UAV → Rover → USV.
              */
             if (window.scrollY < architectureBottom - viewportHeight) {
                 const availableScroll = Math.max(
@@ -1144,7 +1367,7 @@ export function WelcomeThreeScene({
 
                 scrollTarget = THREE.MathUtils.lerp(
                     centerStage,
-                    roverStage,
+                    lastNodeStage,
                     easedProgress,
                 );
 
@@ -1152,7 +1375,7 @@ export function WelcomeThreeScene({
             }
 
             /*
-             * Sau bước Rover:
+             * Sau bước USV:
              * toàn bộ Architecture được thả,
              * camera lùi lại overview.
              */
@@ -1166,7 +1389,7 @@ export function WelcomeThreeScene({
                 1,
             );
 
-            scrollTarget = THREE.MathUtils.lerp(roverStage, 1, exitProgress);
+            scrollTarget = THREE.MathUtils.lerp(lastNodeStage, 1, exitProgress);
         };
 
         const updateSize = (): void => {
@@ -1393,9 +1616,8 @@ export function WelcomeThreeScene({
                     focusedNode.slot.getWorldPosition(architectureAnchor);
 
                     architectureAnchor.y +=
-                        ARCHITECTURE_FOCUS_SETTINGS[
-                            activeNodeRef.current
-                        ].targetHeight * world.scale.y;
+                        ARCHITECTURE_FOCUS_SETTINGS[activeNodeRef.current]
+                            .targetHeight * world.scale.y;
 
                     const architectureFrame = getArchitectureFocusFrame(
                         activeNodeRef.current,
@@ -1523,30 +1745,56 @@ export function WelcomeThreeScene({
                     reducedMotion ? 1 : 0.12,
                 );
 
-                if (architectureFocusActive && node.id === activeNodeRef.current) {
-                    node.ring.rotation.z = reducedMotion
-                        ? 0
-                        : elapsed * 0.22;
+                if (
+                    architectureFocusActive &&
+                    node.id === activeNodeRef.current
+                ) {
+                    node.ring.rotation.z = reducedMotion ? 0 : elapsed * 0.22;
+                }
+
+                if (!reducedMotion && node.id === 'satellite') {
+                    node.slot.position.x =
+                        NODE_POSITIONS.satellite.x +
+                        Math.sin(elapsed * 0.18) * 0.18;
+                    node.slot.position.z =
+                        NODE_POSITIONS.satellite.z +
+                        Math.cos(elapsed * 0.18) * 0.14;
+                    node.slot.rotation.y = elapsed * 0.08;
                 }
 
                 if (!reducedMotion && node.id === 'uav') {
                     node.slot.position.y =
                         NODE_POSITIONS.uav.y + Math.sin(elapsed * 1.25) * 0.1;
                 }
+
+                if (!reducedMotion && node.id === 'usv') {
+                    node.slot.position.y =
+                        NODE_POSITIONS.usv.y + Math.sin(elapsed * 0.9) * 0.055;
+                    node.slot.rotation.z = Math.sin(elapsed * 0.72) * 0.018;
+                }
             }
 
             for (const path of pathRuntimes) {
                 const activePath =
-                    activeNodeRef.current === 'caster' ||
                     path.from === activeNodeRef.current ||
-                    path.to === activeNodeRef.current;
+                    path.to === activeNodeRef.current ||
+                    (activeNodeRef.current === 'caster' &&
+                        path.layer === 'rtcm');
                 const pathOpacity = architectureFocusActive
                     ? activePath
-                        ? 0.92
-                        : 0.14
+                        ? path.layer === 'gnss'
+                            ? 0.76
+                            : 0.92
+                        : path.layer === 'gnss'
+                          ? 0.08
+                          : 0.14
                     : activePath
-                      ? 0.82
-                      : 0.42;
+                      ? path.layer === 'gnss'
+                          ? 0.62
+                          : 0.82
+                      : path.layer === 'gnss'
+                        ? 0.24
+                        : 0.42;
 
                 path.mesh.material.opacity = THREE.MathUtils.lerp(
                     path.mesh.material.opacity,
@@ -1560,16 +1808,26 @@ export function WelcomeThreeScene({
                     particle.position.copy(path.curve.getPointAt(progress));
                     const particleOpacity = architectureFocusActive
                         ? activePath
-                            ? 1
-                            : 0.12
+                            ? path.layer === 'gnss'
+                                ? 0.92
+                                : 1
+                            : 0.1
                         : activePath
-                          ? 0.95
-                          : 0.62;
+                          ? path.layer === 'gnss'
+                              ? 0.86
+                              : 0.95
+                          : path.layer === 'gnss'
+                            ? 0.48
+                            : 0.62;
                     const particleScale = architectureFocusActive
                         ? activePath
-                            ? 1.18
-                            : 0.72
-                        : 1;
+                            ? path.layer === 'gnss'
+                                ? 1.28
+                                : 1.18
+                            : 0.68
+                        : path.layer === 'gnss'
+                          ? 1.08
+                          : 1;
 
                     particle.material.opacity = THREE.MathUtils.lerp(
                         particle.material.opacity,
