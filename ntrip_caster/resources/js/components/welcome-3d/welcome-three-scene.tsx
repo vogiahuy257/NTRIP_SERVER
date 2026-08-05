@@ -44,9 +44,9 @@ const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
     satellite: new THREE.Vector3(-0.25, 8.15, -4.75),
     base: new THREE.Vector3(-5.9, -0.1, 0.1),
     caster: new THREE.Vector3(0, 0.15, -0.45),
-    uav: new THREE.Vector3(5.85, 1.75, -2.1),
+    uav: new THREE.Vector3(5.85, 1.75, -3.1),
     rover: new THREE.Vector3(7.2, -0.3, 2.35),
-    usv: new THREE.Vector3(4.2, -0.16, 2.6),
+    usv: new THREE.Vector3(3.8, -0.76, 2.6),
 };
 
 type ArchitectureFocusSettings = {

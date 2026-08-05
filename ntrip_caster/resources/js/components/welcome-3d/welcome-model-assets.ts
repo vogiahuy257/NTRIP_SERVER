@@ -48,7 +48,7 @@ export const WELCOME_MODEL_ASSETS: Record<
         url: '/models/ntrip-caster.glb',
         targetSize: 3.4,
         position: [0, 0, 0],
-        rotation: [0, 0, 0],
+        rotation: [0, Math.PI, 0],
         scale: 1,
     },
 
