@@ -62,7 +62,7 @@ export const WELCOME_MODEL_ASSETS: Record<
 
     rover: {
         url: '/models/rover.glb',
-        targetSize: 3.2,
+        targetSize: 5.0,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,
@@ -70,7 +70,7 @@ export const WELCOME_MODEL_ASSETS: Record<
 
     usv: {
         url: '/models/usv.glb',
-        targetSize: 3.6,
+        targetSize: 5.0,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,

@@ -187,17 +187,6 @@ function scrollToSection(id: string): void {
     });
 }
 
-function scrollToArchitectureNode(node: WelcomeSceneNode): void {
-    document
-        .querySelector<HTMLElement>(
-            `[data-welcome-architecture-step="${node}"]`,
-        )
-        ?.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-        });
-}
-
 export default function Welcome() {
     const { auth } = usePage().props;
     const [activeNode, setActiveNode] = useState<WelcomeSceneNode>('caster');
@@ -536,8 +525,8 @@ export default function Welcome() {
                         className="relative h-[820svh] scroll-mt-20 sm:h-[850svh] md:h-[880svh] lg:h-[940svh]"
                     >
                         <div className="sticky top-0 flex min-h-[100svh] items-end overflow-hidden px-3 pt-24 pb-3 sm:items-center sm:px-6 sm:pt-28 sm:pb-6 md:px-8 lg:px-10">
-                            <div className="mx-auto grid w-full max-w-[1440px] items-end gap-6 lg:grid-cols-[minmax(21rem,35rem)_minmax(0,1fr)] lg:items-center xl:grid-cols-[minmax(22rem,36rem)_minmax(0,1fr)]">
-                                <div className="pointer-events-auto w-full max-w-[38rem] justify-self-start lg:max-w-[35rem]">
+                            <div className="mx-auto grid w-full max-w-[1440px] items-end gap-6 lg:grid-cols-[minmax(18rem,28rem)_minmax(0,1fr)] lg:items-center xl:grid-cols-[minmax(19rem,30rem)_minmax(0,1fr)]">
+                                <div className="pointer-events-auto w-full max-w-[34rem] justify-self-start lg:max-w-[28rem] xl:max-w-[30rem]">
                                     <div className="overflow-hidden rounded-[1.45rem] border border-black/[0.08] bg-white/82 shadow-[0_28px_90px_rgba(0,0,0,0.11)] backdrop-blur-2xl sm:rounded-[1.8rem]">
                                         <div className="flex items-center justify-between gap-4 border-b border-black/[0.06] px-4 py-3.5 sm:px-6 sm:py-4.5">
                                             <div className="flex min-w-0 items-center gap-2.5">
@@ -573,10 +562,10 @@ export default function Welcome() {
                                             </div>
                                         </div>
 
-                                        <div className="relative min-h-[15.5rem] overflow-hidden px-4 py-4 sm:min-h-[17rem] sm:px-6 sm:py-5 lg:min-h-[18rem]">
+                                        <div className="relative min-h-[13rem] overflow-hidden px-4 py-3.5 sm:min-h-[14rem] sm:px-5 sm:py-4 lg:min-h-[14.5rem]">
                                             <span
                                                 aria-hidden="true"
-                                                className="pointer-events-none absolute -top-7 right-2 font-mono text-[7.5rem] leading-none font-black tracking-[-0.12em] text-black/[0.035] sm:-top-10 sm:right-4 sm:text-[10rem] lg:text-[11rem]"
+                                                className="pointer-events-none absolute -top-5 right-2 font-mono text-[6rem] leading-none font-black tracking-[-0.12em] text-black/[0.035] sm:-top-7 sm:right-3 sm:text-[7.5rem] lg:text-[8rem]"
                                             >
                                                 {activeContent.index}
                                             </span>
@@ -606,36 +595,36 @@ export default function Welcome() {
                                                     </span>
                                                 </div>
 
-                                                <div className="mt-auto pt-7 sm:pt-9">
-                                                    <p className="max-w-[26ch] text-[clamp(1.75rem,7vw,3rem)] leading-[0.94] font-semibold tracking-[-0.055em] text-black sm:text-[clamp(2.25rem,5vw,3.4rem)]">
+                                                <div className="mt-auto pt-4 sm:pt-5">
+                                                    <p className="max-w-[24ch] text-[clamp(1.55rem,6vw,2.35rem)] leading-[0.96] font-semibold tracking-[-0.05em] text-black sm:text-[clamp(1.85rem,3.5vw,2.6rem)]">
                                                         {activeContent.label}
                                                     </p>
-                                                    <p className="mt-3 max-w-lg text-sm leading-6 font-medium text-black/58 sm:text-base sm:leading-7">
+                                                    <p className="mt-2 max-w-lg text-xs leading-5 font-medium text-black/58 sm:text-sm sm:leading-6">
                                                         {activeContent.title}
                                                     </p>
-                                                    <p className="mt-2 hidden max-w-lg text-xs leading-5 text-black/42 min-[380px]:block sm:text-[13px] sm:leading-6">
+                                                    <p className="mt-1.5 hidden max-w-lg text-[11px] leading-5 text-black/42 min-[380px]:block sm:text-xs">
                                                         {
                                                             activeContent.description
                                                         }
                                                     </p>
                                                 </div>
 
-                                                <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-6">
-                                                    <div className="rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                                                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:mt-4">
+                                                    <div className="rounded-xl border border-black/[0.06] bg-white/60 px-2.5 py-2 sm:px-3 sm:py-2.5">
                                                         <p className="text-[9px] font-bold tracking-[0.12em] text-black/30 uppercase sm:text-[10px]">
                                                             Runtime role
                                                         </p>
-                                                        <p className="mt-1 truncate text-xs font-semibold text-black/70 sm:text-sm">
+                                                        <p className="mt-0.5 truncate text-[11px] font-semibold text-black/70 sm:text-xs">
                                                             {
                                                                 activeVisual.metric
                                                             }
                                                         </p>
                                                     </div>
-                                                    <div className="rounded-xl border border-black/[0.06] bg-white/60 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
+                                                    <div className="rounded-xl border border-black/[0.06] bg-white/60 px-2.5 py-2 sm:px-3 sm:py-2.5">
                                                         <p className="text-[9px] font-bold tracking-[0.12em] text-black/30 uppercase sm:text-[10px]">
                                                             Active path
                                                         </p>
-                                                        <p className="mt-1 truncate text-xs font-semibold text-black/70 sm:text-sm">
+                                                        <p className="mt-0.5 truncate text-[11px] font-semibold text-black/70 sm:text-xs">
                                                             {activeVisual.path}
                                                         </p>
                                                     </div>
@@ -643,98 +632,8 @@ export default function Welcome() {
                                             </div>
                                         </div>
 
-                                        <div className="border-t border-black/[0.06] bg-white/38 px-3 py-3 sm:px-4 sm:py-4">
-                                            <div className="relative grid grid-cols-3 gap-1.5 sm:grid-cols-6 lg:grid-cols-1 lg:gap-1">
-                                                <span
-                                                    aria-hidden="true"
-                                                    className="absolute top-5 right-5 left-5 hidden h-px bg-black/[0.08] sm:block lg:top-5 lg:right-auto lg:bottom-5 lg:left-5 lg:h-auto lg:w-px"
-                                                />
-
-                                                {NODE_ORDER.map((node) => {
-                                                    const content =
-                                                        NODE_CONTENT[node];
-                                                    const visual =
-                                                        NODE_VISUALS[node];
-                                                    const Icon = visual.icon;
-                                                    const selected =
-                                                        activeNode === node;
-                                                    const passed =
-                                                        NODE_ORDER.indexOf(
-                                                            node,
-                                                        ) <= activeNodeIndex;
-
-                                                    return (
-                                                        <button
-                                                            key={node}
-                                                            type="button"
-                                                            aria-pressed={
-                                                                selected
-                                                            }
-                                                            onClick={() => {
-                                                                setActiveNode(
-                                                                    node,
-                                                                );
-                                                                scrollToArchitectureNode(
-                                                                    node,
-                                                                );
-                                                            }}
-                                                            onFocus={() =>
-                                                                setActiveNode(
-                                                                    node,
-                                                                )
-                                                            }
-                                                            className={`group relative z-10 flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-xl border px-1.5 py-2 text-left transition-all duration-500 focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:min-h-14 sm:px-2 lg:min-h-12 lg:justify-start lg:border-transparent lg:px-2.5 ${
-                                                                selected
-                                                                    ? 'border-black/10 bg-black text-white shadow-[0_14px_34px_rgba(0,0,0,0.16)] lg:translate-x-1'
-                                                                    : 'border-black/[0.06] bg-white/58 text-black/48 hover:border-black/10 hover:bg-white/84 lg:bg-transparent lg:hover:bg-black/[0.04]'
-                                                            }`}
-                                                        >
-                                                            <span
-                                                                className={`grid size-7 shrink-0 place-items-center rounded-full border text-[10px] font-bold tabular-nums transition-all duration-500 sm:size-8 ${
-                                                                    selected
-                                                                        ? 'border-white/15 bg-white/12 text-white'
-                                                                        : passed
-                                                                          ? 'border-black bg-black text-white'
-                                                                          : 'border-black/[0.08] bg-[#f4f4f1] text-black/32'
-                                                                }`}
-                                                            >
-                                                                <span className="sm:hidden">
-                                                                    {
-                                                                        content.index
-                                                                    }
-                                                                </span>
-                                                                <Icon
-                                                                    className="hidden size-3.5 sm:block"
-                                                                    strokeWidth={
-                                                                        1.8
-                                                                    }
-                                                                />
-                                                            </span>
-
-                                                            <span className="hidden min-w-0 sm:block lg:flex-1">
-                                                                <span className="block truncate text-[11px] font-semibold sm:text-xs">
-                                                                    {
-                                                                        content.label
-                                                                    }
-                                                                </span>
-                                                                <span
-                                                                    className={`mt-0.5 hidden truncate text-[10px] lg:block ${
-                                                                        selected
-                                                                            ? 'text-white/48'
-                                                                            : 'text-black/32'
-                                                                    }`}
-                                                                >
-                                                                    {
-                                                                        visual.role
-                                                                    }
-                                                                </span>
-                                                            </span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-
-                                            <div className="mt-3 flex items-center gap-3 px-1">
+                                        <div className="border-t border-black/[0.06] bg-white/38 px-3 py-2.5 sm:px-3.5 sm:py-3">
+                                            <div className="flex items-center gap-3 px-1">
                                                 <div className="relative h-1 flex-1 overflow-hidden rounded-full bg-black/[0.07]">
                                                     <div
                                                         className="h-full rounded-full bg-black transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
