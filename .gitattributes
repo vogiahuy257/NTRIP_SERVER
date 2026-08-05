@@ -1,2 +1,0 @@
-ntrip_caster/public/models/usv.glb filter=lfs diff=lfs merge=lfs -text
-*.glb filter=lfs diff=lfs merge=lfs -text
