@@ -13,6 +13,8 @@ import type {
 type WelcomeThreeSceneProps = {
     activeNode: WelcomeSceneNode;
     onActiveNodeChange: (node: WelcomeSceneNode) => void;
+    onLoadingProgressChange?: (progress: number) => void;
+    onReady?: () => void;
     className?: string;
 };
 
@@ -968,11 +970,15 @@ function resolveNodeFromObject(
 export function WelcomeThreeScene({
     activeNode,
     onActiveNodeChange,
+    onLoadingProgressChange,
+    onReady,
     className,
 }: WelcomeThreeSceneProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const activeNodeRef = useRef(activeNode);
     const onActiveNodeChangeRef = useRef(onActiveNodeChange);
+    const onLoadingProgressChangeRef = useRef(onLoadingProgressChange);
+    const onReadyRef = useRef(onReady);
     const [webGlAvailable, setWebGlAvailable] = useState(true);
 
     useEffect(() => {
@@ -982,6 +988,14 @@ export function WelcomeThreeScene({
     useEffect(() => {
         onActiveNodeChangeRef.current = onActiveNodeChange;
     }, [onActiveNodeChange]);
+
+    useEffect(() => {
+        onLoadingProgressChangeRef.current = onLoadingProgressChange;
+    }, [onLoadingProgressChange]);
+
+    useEffect(() => {
+        onReadyRef.current = onReady;
+    }, [onReady]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -1030,11 +1044,80 @@ export function WelcomeThreeScene({
         const pathRuntimes: DataPath[] = [];
         const gnssCoverages: GnssCoverage[] = [];
         const loader = new GLTFLoader();
+
+        const modelEntries = (
+            Object.entries(WELCOME_MODEL_ASSETS) as [
+                WelcomeReplaceableModelNode,
+                (typeof WELCOME_MODEL_ASSETS)[WelcomeReplaceableModelNode],
+            ][]
+        ).filter(([, asset]) => Boolean(asset.url));
+
+        const modelProgress = new Map<WelcomeReplaceableModelNode, number>(
+            modelEntries.map(([id]) => [id, 0]),
+        );
+
+        const totalModelCount = modelEntries.length;
+
+        let completedModelCount = 0;
+        let readyEventSent = false;
+
         const mediaQuery = window.matchMedia(
             '(prefers-reduced-motion: reduce)',
         );
 
         loader.setMeshoptDecoder(MeshoptDecoder);
+
+        const reportLoadingProgress = (): void => {
+            if (totalModelCount === 0) {
+                onLoadingProgressChangeRef.current?.(100);
+
+                return;
+            }
+
+            const totalProgress = Array.from(modelProgress.values()).reduce(
+                (total, progress) => total + progress,
+                0,
+            );
+
+            const percentage = Math.round(
+                (totalProgress / totalModelCount) * 100,
+            );
+
+            onLoadingProgressChangeRef.current?.(
+                Math.min(100, Math.max(0, percentage)),
+            );
+        };
+
+        const completeModelLoading = (
+            id: WelcomeReplaceableModelNode,
+        ): void => {
+            if ((modelProgress.get(id) ?? 0) >= 1) {
+                return;
+            }
+
+            modelProgress.set(id, 1);
+            completedModelCount += 1;
+
+            reportLoadingProgress();
+
+            if (completedModelCount >= totalModelCount && !readyEventSent) {
+                readyEventSent = true;
+
+                /*
+                 * Chờ thêm hai frame để model vừa tải được render
+                 * ít nhất một lần trước khi đóng loading page.
+                 */
+                window.requestAnimationFrame(() => {
+                    window.requestAnimationFrame(() => {
+                        if (!disposed) {
+                            onReadyRef.current?.();
+                        }
+                    });
+                });
+            }
+        };
+
+        onLoadingProgressChangeRef.current?.(0);
 
         let animationFrame = 0;
         let disposed = false;
@@ -1230,11 +1313,14 @@ export function WelcomeThreeScene({
             const asset = WELCOME_MODEL_ASSETS[id];
 
             if (!asset.url) {
+                completeModelLoading(id);
+
                 return;
             }
 
             loader.load(
                 asset.url,
+
                 (gltf: GLTF) => {
                     if (disposed) {
                         disposeObject(gltf.scene);
@@ -1245,44 +1331,86 @@ export function WelcomeThreeScene({
                     const node = modelNodes.get(id);
 
                     if (!node) {
+                        disposeObject(gltf.scene);
+                        completeModelLoading(id);
+
                         return;
                     }
 
                     const model = gltf.scene;
+
                     normalizeLoadedModel(model, asset.targetSize);
+
                     model.position.add(new THREE.Vector3(...asset.position));
+
                     model.rotation.set(...asset.rotation);
                     model.scale.multiplyScalar(asset.scale);
+
                     model.traverse((child: THREE.Object3D) => {
                         if (child instanceof THREE.Mesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
                         }
                     });
+
                     setNodeMetadata(model, id);
 
                     const oldChildren = node.slot.children.filter(
                         (child: THREE.Object3D) => child !== node.ring,
                     );
+
                     oldChildren.forEach((child: THREE.Object3D) => {
                         node.slot.remove(child);
                         disposeObject(child);
                     });
+
                     node.slot.add(model);
+
+                    completeModelLoading(id);
                 },
-                undefined,
+
+                (event: ProgressEvent<EventTarget>) => {
+                    /*
+                     * Khi server gửi Content-Length,
+                     * progress sẽ tăng liên tục thay vì chỉ 0 → 100.
+                     */
+                    if (event.lengthComputable && event.total > 0) {
+                        const progress = Math.min(
+                            0.99,
+                            event.loaded / event.total,
+                        );
+
+                        modelProgress.set(id, progress);
+                        reportLoadingProgress();
+                    }
+                },
+
                 (error: unknown) => {
                     console.warn(
                         `Unable to load ${id} GLB. The procedural fallback remains active.`,
                         error,
                     );
+
+                    /*
+                     * Model lỗi vẫn được xem là hoàn thành,
+                     * vì scene đã có procedural fallback.
+                     */
+                    completeModelLoading(id);
                 },
             );
         };
 
-        (
-            Object.keys(WELCOME_MODEL_ASSETS) as WelcomeReplaceableModelNode[]
-        ).forEach(loadRealModel);
+        if (modelEntries.length === 0) {
+            onLoadingProgressChangeRef.current?.(100);
+
+            window.requestAnimationFrame(() => {
+                onReadyRef.current?.();
+            });
+        } else {
+            modelEntries.forEach(([id]) => {
+                loadRealModel(id);
+            });
+        }
 
         const updateScrollTarget = (): void => {
             const hero = document.querySelector<HTMLElement>(

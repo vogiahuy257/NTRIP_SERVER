@@ -184,12 +184,48 @@ function scrollToSection(id: string): void {
 export default function Welcome() {
     const { auth } = usePage().props;
     const [activeNode, setActiveNode] = useState<WelcomeSceneNode>('caster');
+    const [loadingProgress, setLoadingProgress] = useState(0);
+    const [sceneReady, setSceneReady] = useState(false);
+    const [showLoadingPage, setShowLoadingPage] = useState(true);
     const activeNodeIndex = Math.max(0, NODE_ORDER.indexOf(activeNode));
     const activeContent = NODE_CONTENT[activeNode];
     const activeVisual = NODE_VISUALS[activeNode];
     const ActiveNodeIcon = activeVisual.icon;
     const architectureProgress =
         ((activeNodeIndex + 1) / NODE_ORDER.length) * 100;
+
+    useEffect(() => {
+        if (!showLoadingPage) {
+            return;
+        }
+
+        const previousHtmlOverflow = document.documentElement.style.overflow;
+
+        const previousBodyOverflow = document.body.style.overflow;
+
+        document.documentElement.style.overflow = 'hidden';
+        document.body.style.overflow = 'hidden';
+
+        return () => {
+            document.documentElement.style.overflow = previousHtmlOverflow;
+
+            document.body.style.overflow = previousBodyOverflow;
+        };
+    }, [showLoadingPage]);
+
+    useEffect(() => {
+        if (!sceneReady) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setShowLoadingPage(false);
+        }, 650);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [sceneReady]);
 
     useEffect(() => {
         let animationFrame = 0;
@@ -327,6 +363,108 @@ export default function Welcome() {
                 }
             `}</style>
 
+            {showLoadingPage && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    aria-label={`Loading 3D network ${loadingProgress}%`}
+                    className={`fixed inset-0 z-[100] grid place-items-center bg-[#f7f7f3] px-5 transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                        sceneReady
+                            ? 'pointer-events-none scale-[1.015] opacity-0'
+                            : 'opacity-100'
+                    }`}
+                >
+                    <div className="w-full max-w-sm">
+                        <div className="flex items-center gap-3">
+                            <span className="relative grid size-11 place-items-center rounded-2xl bg-black text-white shadow-[0_14px_35px_rgba(0,0,0,0.18)]">
+                                <RadioTower
+                                    className="size-5"
+                                    strokeWidth={1.7}
+                                />
+
+                                <span className="absolute inset-0 animate-ping rounded-2xl border border-black/25 opacity-20" />
+                            </span>
+
+                            <div>
+                                <p className="text-sm font-bold tracking-[-0.025em]">
+                                    NTRIP Caster
+                                </p>
+
+                                <p className="mt-1 text-[10px] font-semibold tracking-[0.14em] text-black/35 uppercase">
+                                    Initializing GNSS network
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-12">
+                            <div className="flex items-end justify-between gap-4">
+                                <div>
+                                    <p className="text-[10px] font-bold tracking-[0.16em] text-black/35 uppercase">
+                                        Loading 3D assets
+                                    </p>
+
+                                    <p className="mt-2 text-sm text-black/52">
+                                        Satellite · Base · Caster · UAV · Rover
+                                        · USV
+                                    </p>
+                                </div>
+
+                                <p className="font-mono text-3xl font-semibold tracking-[-0.06em] tabular-nums">
+                                    {String(loadingProgress).padStart(3, '0')}
+                                    <span className="ml-1 text-sm text-black/30">
+                                        %
+                                    </span>
+                                </p>
+                            </div>
+
+                            <div className="mt-5 h-1 overflow-hidden rounded-full bg-black/[0.08]">
+                                <div
+                                    className="h-full rounded-full bg-black transition-[width] duration-300 ease-out"
+                                    style={{
+                                        width: `${loadingProgress}%`,
+                                    }}
+                                />
+                            </div>
+
+                            <div className="mt-4 grid grid-cols-6 gap-1.5">
+                                {[
+                                    'Satellite',
+                                    'Base',
+                                    'Caster',
+                                    'UAV',
+                                    'Rover',
+                                    'USV',
+                                ].map((label, index) => {
+                                    const threshold = ((index + 1) / 6) * 100;
+
+                                    const loaded = loadingProgress >= threshold;
+
+                                    return (
+                                        <div key={label} className="min-w-0">
+                                            <div
+                                                className={`h-1 rounded-full transition-colors duration-300 ${
+                                                    loaded
+                                                        ? 'bg-black'
+                                                        : 'bg-black/[0.08]'
+                                                }`}
+                                            />
+
+                                            <p className="mt-2 hidden truncate text-center text-[8px] font-semibold text-black/30 min-[360px]:block">
+                                                {label}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <p className="mt-10 text-center text-[10px] leading-5 text-black/30">
+                            Preparing the realtime correction network
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="relative isolate min-h-screen overflow-x-clip bg-[#f7f7f3] text-[#11110f] selection:bg-black selection:text-white">
                 <div
                     aria-hidden="true"
@@ -344,6 +482,11 @@ export default function Welcome() {
                 <WelcomeThreeScene
                     activeNode={activeNode}
                     onActiveNodeChange={setActiveNode}
+                    onLoadingProgressChange={setLoadingProgress}
+                    onReady={() => {
+                        setLoadingProgress(100);
+                        setSceneReady(true);
+                    }}
                     className="fixed inset-0 z-0 h-[100svh] w-full"
                 />
 
