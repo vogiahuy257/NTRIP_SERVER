@@ -32,7 +32,7 @@ export const WELCOME_MODEL_ASSETS: Record<
         url: '/models/satellite.glb',
         targetSize: 3.8,
         position: [0, 0, 0],
-        rotation: [0, 0, 0],
+        rotation: [0, 0, Math.PI / 2],
         scale: 1,
     },
 

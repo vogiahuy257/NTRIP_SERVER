@@ -30,16 +30,23 @@ type DataPath = {
     mesh: THREE.Mesh<THREE.TubeGeometry, THREE.MeshBasicMaterial>;
     particles: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>[];
     speed: number;
-    layer: 'gnss' | 'rtcm';
+};
+
+type GnssCoverage = {
+    to: Exclude<WelcomeSceneNode, 'satellite' | 'caster'>;
+    group: THREE.Group;
+    cone: THREE.Mesh<THREE.CylinderGeometry, THREE.MeshBasicMaterial>;
+    rings: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>[];
+    phase: number;
 };
 
 const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
-    satellite: new THREE.Vector3(-0.5, 7.0, -3.6),
-    base: new THREE.Vector3(-4.25, -0.1, 0.25),
-    caster: new THREE.Vector3(0, 0.15, -0.2),
-    uav: new THREE.Vector3(4.15, 1.55, -1.15),
-    rover: new THREE.Vector3(4.15, -0.3, 2.25),
-    usv: new THREE.Vector3(5.2, -0.18, 5.0),
+    satellite: new THREE.Vector3(-0.25, 8.15, -4.75),
+    base: new THREE.Vector3(-5.9, -0.1, 0.1),
+    caster: new THREE.Vector3(0, 0.15, -0.45),
+    uav: new THREE.Vector3(5.85, 1.75, -2.1),
+    rover: new THREE.Vector3(5.65, -0.3, 2.85),
+    usv: new THREE.Vector3(7.15, -0.18, 6.0),
 };
 
 type ArchitectureFocusSettings = {
@@ -641,7 +648,7 @@ function createSatellite(): THREE.Group {
         [1, 0.45, 1],
     );
 
-    group.rotation.z = -0.08;
+    group.rotation.z = Math.PI / 2;
 
     return group;
 }
@@ -764,44 +771,35 @@ function createPath(
     to: WelcomeSceneNode,
     points: THREE.Vector3[],
     speed: number,
-    layer: DataPath['layer'] = 'rtcm',
 ): { mesh: THREE.Mesh; runtime: DataPath } {
     const curve = new THREE.CatmullRomCurve3(points);
-    const isGnss = layer === 'gnss';
     const material = new THREE.MeshBasicMaterial({
-        color: isGnss ? 0x8a8a84 : 0x4a4a47,
+        color: 0x4a4a47,
         transparent: true,
-        opacity: isGnss ? 0.34 : 0.52,
+        opacity: 0.52,
         depthWrite: false,
     });
     const mesh = new THREE.Mesh(
-        new THREE.TubeGeometry(
-            curve,
-            isGnss ? 56 : 72,
-            isGnss ? 0.012 : 0.024,
-            8,
-            false,
-        ),
+        new THREE.TubeGeometry(curve, 72, 0.024, 8, false),
         material,
     );
     const particles: DataPath['particles'] = [];
-    const particleCount = isGnss ? 4 : 5;
 
-    mesh.renderOrder = isGnss ? 3 : 4;
+    mesh.renderOrder = 4;
 
-    for (let index = 0; index < particleCount; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
         const particle = new THREE.Mesh(
-            new THREE.SphereGeometry(isGnss ? 0.052 : 0.075, 12, 8),
+            new THREE.SphereGeometry(0.075, 12, 8),
             new THREE.MeshBasicMaterial({
-                color: isGnss ? 0xf5f5f0 : 0x111111,
+                color: 0x111111,
                 transparent: true,
-                opacity: isGnss ? 0.9 : 0.82,
+                opacity: 0.82,
                 depthWrite: false,
             }),
         );
 
-        particle.userData.pathOffset = index / particleCount;
-        particle.renderOrder = isGnss ? 4 : 5;
+        particle.userData.pathOffset = index / 5;
+        particle.renderOrder = 5;
         particles.push(particle);
     }
 
@@ -814,8 +812,83 @@ function createPath(
             mesh,
             particles,
             speed,
-            layer,
         },
+    };
+}
+
+function createGnssCoverage(
+    to: GnssCoverage['to'],
+    receiverOffset: THREE.Vector3,
+    phase: number,
+): GnssCoverage {
+    const source = NODE_POSITIONS.satellite
+        .clone()
+        .add(new THREE.Vector3(0, -0.7, 0));
+    const target = NODE_POSITIONS[to].clone().add(receiverOffset);
+    const direction = target.clone().sub(source);
+    const length = direction.length();
+    const normalizedDirection = direction.clone().normalize();
+    const midpoint = source
+        .clone()
+        .addScaledVector(normalizedDirection, length / 2);
+    const group = new THREE.Group();
+
+    const targetRadius = clamp(length * 0.115, 0.75, 1.55);
+    const coneMaterial = new THREE.MeshBasicMaterial({
+        color: 0x9d9d96,
+        transparent: true,
+        opacity: 0.022,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+    });
+    const cone = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.035, targetRadius, length, 40, 1, true),
+        coneMaterial,
+    );
+
+    cone.position.copy(midpoint);
+    cone.quaternion.setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        normalizedDirection,
+    );
+    cone.renderOrder = 2;
+    group.add(cone);
+
+    const rings: GnssCoverage['rings'] = [];
+    const ringCount = 5;
+
+    for (let index = 0; index < ringCount; index += 1) {
+        const progress = 0.18 + (index / (ringCount - 1)) * 0.72;
+        const radius = Math.max(0.16, targetRadius * progress);
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(radius, 0.016, 8, 52),
+            new THREE.MeshBasicMaterial({
+                color: 0x777771,
+                transparent: true,
+                opacity: 0.2,
+                depthWrite: false,
+            }),
+        );
+
+        ring.position.copy(source.clone().lerp(target, progress));
+        ring.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0, 0, 1),
+            normalizedDirection,
+        );
+        ring.userData.baseScale = 1;
+        ring.userData.waveProgress = progress;
+        ring.renderOrder = 3;
+        group.add(ring);
+        rings.push(ring);
+    }
+
+    return {
+        to,
+        group,
+        cone,
+        rings,
+        phase,
     };
 }
 
@@ -955,6 +1028,7 @@ export function WelcomeThreeScene({
         const architectureAnchor = new THREE.Vector3();
         const modelNodes = new Map<WelcomeSceneNode, InteractiveNode>();
         const pathRuntimes: DataPath[] = [];
+        const gnssCoverages: GnssCoverage[] = [];
         const loader = new GLTFLoader();
         const mediaQuery = window.matchMedia(
             '(prefers-reduced-motion: reduce)',
@@ -1072,61 +1146,19 @@ export function WelcomeThreeScene({
             world.add(node.slot);
         }
 
-        const connections = [
-            // GNSS downlinks from orbit to every positioning receiver.
-            createPath(
-                'satellite',
-                'base',
-                [
-                    NODE_POSITIONS.satellite.clone(),
-                    new THREE.Vector3(-2.5, 4.8, -1.5),
-                    NODE_POSITIONS.base
-                        .clone()
-                        .add(new THREE.Vector3(0, 3.0, 0)),
-                ],
-                0.075,
-                'gnss',
-            ),
-            createPath(
-                'satellite',
-                'uav',
-                [
-                    NODE_POSITIONS.satellite.clone(),
-                    new THREE.Vector3(2.2, 5.6, -2.6),
-                    NODE_POSITIONS.uav
-                        .clone()
-                        .add(new THREE.Vector3(0, 0.3, 0)),
-                ],
-                0.095,
-                'gnss',
-            ),
-            createPath(
-                'satellite',
-                'rover',
-                [
-                    NODE_POSITIONS.satellite.clone(),
-                    new THREE.Vector3(1.9, 4.7, 0.2),
-                    NODE_POSITIONS.rover
-                        .clone()
-                        .add(new THREE.Vector3(0, 2.0, 0)),
-                ],
-                0.082,
-                'gnss',
-            ),
-            createPath(
-                'satellite',
-                'usv',
-                [
-                    NODE_POSITIONS.satellite.clone(),
-                    new THREE.Vector3(2.6, 4.6, 2.0),
-                    NODE_POSITIONS.usv
-                        .clone()
-                        .add(new THREE.Vector3(0, 1.8, 0)),
-                ],
-                0.088,
-                'gnss',
-            ),
+        const coverageSignals = [
+            createGnssCoverage('base', new THREE.Vector3(0, 2.9, 0), 0),
+            createGnssCoverage('uav', new THREE.Vector3(0, 0.25, 0), 0.18),
+            createGnssCoverage('rover', new THREE.Vector3(0, 1.8, 0), 0.36),
+            createGnssCoverage('usv', new THREE.Vector3(0, 1.55, 0), 0.54),
+        ];
 
+        coverageSignals.forEach((coverage) => {
+            world.add(coverage.group);
+            gnssCoverages.push(coverage);
+        });
+
+        const connections = [
             // RTCM correction transport through the NTRIP network.
             createPath(
                 'base',
@@ -1135,7 +1167,7 @@ export function WelcomeThreeScene({
                     NODE_POSITIONS.base
                         .clone()
                         .add(new THREE.Vector3(0, 1.15, 0)),
-                    new THREE.Vector3(-2.4, 2.0, -0.8),
+                    new THREE.Vector3(-3.15, 2.15, -0.9),
                     NODE_POSITIONS.caster
                         .clone()
                         .add(new THREE.Vector3(0, 1.6, 0)),
@@ -1149,7 +1181,7 @@ export function WelcomeThreeScene({
                     NODE_POSITIONS.caster
                         .clone()
                         .add(new THREE.Vector3(0, 1.65, 0)),
-                    new THREE.Vector3(2.0, 2.6, -1.0),
+                    new THREE.Vector3(2.75, 2.85, -1.35),
                     NODE_POSITIONS.uav
                         .clone()
                         .add(new THREE.Vector3(0, 0.1, 0)),
@@ -1163,7 +1195,7 @@ export function WelcomeThreeScene({
                     NODE_POSITIONS.caster
                         .clone()
                         .add(new THREE.Vector3(0, 1.4, 0)),
-                    new THREE.Vector3(2.0, 1.45, 1.25),
+                    new THREE.Vector3(2.8, 1.55, 1.65),
                     NODE_POSITIONS.rover
                         .clone()
                         .add(new THREE.Vector3(0, 1.0, 0)),
@@ -1177,7 +1209,7 @@ export function WelcomeThreeScene({
                     NODE_POSITIONS.caster
                         .clone()
                         .add(new THREE.Vector3(0, 1.35, 0)),
-                    new THREE.Vector3(2.5, 1.25, 2.7),
+                    new THREE.Vector3(3.4, 1.3, 3.4),
                     NODE_POSITIONS.usv
                         .clone()
                         .add(new THREE.Vector3(0, 0.9, 0)),
@@ -1759,7 +1791,7 @@ export function WelcomeThreeScene({
                     node.slot.position.z =
                         NODE_POSITIONS.satellite.z +
                         Math.cos(elapsed * 0.18) * 0.14;
-                    node.slot.rotation.y = elapsed * 0.08;
+                    node.slot.rotation.y = elapsed * 0.06;
                 }
 
                 if (!reducedMotion && node.id === 'uav') {
@@ -1774,27 +1806,64 @@ export function WelcomeThreeScene({
                 }
             }
 
+            for (const coverage of gnssCoverages) {
+                const activeCoverage =
+                    activeNodeRef.current === 'satellite' ||
+                    activeNodeRef.current === coverage.to;
+                const coverageOpacity = architectureFocusActive
+                    ? activeCoverage
+                        ? 0.052
+                        : 0.008
+                    : activeCoverage
+                      ? 0.038
+                      : 0.018;
+
+                coverage.cone.material.opacity = THREE.MathUtils.lerp(
+                    coverage.cone.material.opacity,
+                    coverageOpacity,
+                    reducedMotion ? 1 : 0.08,
+                );
+
+                coverage.rings.forEach((ring, index) => {
+                    const wave = reducedMotion
+                        ? index / coverage.rings.length
+                        : (elapsed * 0.2 + coverage.phase + index * 0.16) % 1;
+                    const pulse = 0.92 + Math.sin(wave * Math.PI * 2) * 0.08;
+                    const ringOpacity = architectureFocusActive
+                        ? activeCoverage
+                            ? 0.34 - wave * 0.12
+                            : 0.035
+                        : activeCoverage
+                          ? 0.26 - wave * 0.08
+                          : 0.11;
+
+                    ring.scale.setScalar(
+                        THREE.MathUtils.lerp(
+                            ring.scale.x,
+                            pulse,
+                            reducedMotion ? 1 : 0.1,
+                        ),
+                    );
+                    ring.material.opacity = THREE.MathUtils.lerp(
+                        ring.material.opacity,
+                        Math.max(0.02, ringOpacity),
+                        reducedMotion ? 1 : 0.1,
+                    );
+                });
+            }
+
             for (const path of pathRuntimes) {
                 const activePath =
                     path.from === activeNodeRef.current ||
                     path.to === activeNodeRef.current ||
-                    (activeNodeRef.current === 'caster' &&
-                        path.layer === 'rtcm');
+                    activeNodeRef.current === 'caster';
                 const pathOpacity = architectureFocusActive
                     ? activePath
-                        ? path.layer === 'gnss'
-                            ? 0.76
-                            : 0.92
-                        : path.layer === 'gnss'
-                          ? 0.08
-                          : 0.14
+                        ? 0.92
+                        : 0.14
                     : activePath
-                      ? path.layer === 'gnss'
-                          ? 0.62
-                          : 0.82
-                      : path.layer === 'gnss'
-                        ? 0.24
-                        : 0.42;
+                      ? 0.82
+                      : 0.42;
 
                 path.mesh.material.opacity = THREE.MathUtils.lerp(
                     path.mesh.material.opacity,
@@ -1808,26 +1877,16 @@ export function WelcomeThreeScene({
                     particle.position.copy(path.curve.getPointAt(progress));
                     const particleOpacity = architectureFocusActive
                         ? activePath
-                            ? path.layer === 'gnss'
-                                ? 0.92
-                                : 1
+                            ? 1
                             : 0.1
                         : activePath
-                          ? path.layer === 'gnss'
-                              ? 0.86
-                              : 0.95
-                          : path.layer === 'gnss'
-                            ? 0.48
-                            : 0.62;
+                          ? 0.95
+                          : 0.62;
                     const particleScale = architectureFocusActive
                         ? activePath
-                            ? path.layer === 'gnss'
-                                ? 1.28
-                                : 1.18
+                            ? 1.18
                             : 0.68
-                        : path.layer === 'gnss'
-                          ? 1.08
-                          : 1;
+                        : 1;
 
                     particle.material.opacity = THREE.MathUtils.lerp(
                         particle.material.opacity,
