@@ -428,3 +428,55 @@ test(
         expect($result->allowed())->toBeTrue();
     }
 );
+
+test(
+    'auto mountpoint requires Rover credentials',
+    function (): void {
+        $result = $this->service->authenticateAuto(
+            null,
+            null,
+        );
+
+        expect($result->allowed())->toBeFalse()
+            ->and($result->code)->toBe(
+                RoverAuthenticationCode::CredentialsRequired,
+            );
+    },
+);
+
+test(
+    'auto mountpoint rejects account without usable grants',
+    function (): void {
+        $account = RoverAccount::factory()->create();
+
+        $result = $this->service->authenticateAuto(
+            $account->username,
+            RoverAccountFactory::PASSWORD,
+        );
+
+        expect($result->allowed())->toBeFalse()
+            ->and($result->code)->toBe(
+                RoverAuthenticationCode::AccessNotGranted,
+            );
+    },
+);
+
+test(
+    'auto mountpoint authorizes account with a usable grant',
+    function (): void {
+        [$mountpoint, $account] =
+            createRoverAuthenticationFixture();
+
+        $result = $this->service->authenticateAuto(
+            strtoupper($account->username),
+            RoverAccountFactory::PASSWORD,
+        );
+
+        expect($result->allowed())->toBeTrue()
+            ->and($result->authenticated())->toBeTrue()
+            ->and($result->mountpoint)->toBeNull()
+            ->and($result->account?->id)->toBe($account->id)
+            ->and($account->fresh()->last_authenticated_at)
+            ->not->toBeNull();
+    },
+);

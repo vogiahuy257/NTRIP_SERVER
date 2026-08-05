@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services\Ntrip\Auth;
 
 use App\Enums\Ntrip\RoverAuthenticationCode;
@@ -15,7 +17,7 @@ final readonly class RoverAuthenticationResult
     ) {}
 
     public static function allowPublic(
-        Mountpoint $mountpoint
+        Mountpoint $mountpoint,
     ): self {
         return new self(
             code: RoverAuthenticationCode::AllowedPublic,
@@ -26,7 +28,7 @@ final readonly class RoverAuthenticationResult
 
     public static function allowAuthenticated(
         Mountpoint $mountpoint,
-        RoverAccount $account
+        RoverAccount $account,
     ): self {
         return new self(
             code: RoverAuthenticationCode::AllowedAuthenticated,
@@ -35,10 +37,20 @@ final readonly class RoverAuthenticationResult
         );
     }
 
+    public static function allowAutoAuthenticated(
+        RoverAccount $account,
+    ): self {
+        return new self(
+            code: RoverAuthenticationCode::AllowedAuthenticated,
+            mountpoint: null,
+            account: $account,
+        );
+    }
+
     public static function deny(
         RoverAuthenticationCode $code,
         ?Mountpoint $mountpoint = null,
-        ?RoverAccount $account = null
+        ?RoverAccount $account = null,
     ): self {
         return new self(
             code: $code,

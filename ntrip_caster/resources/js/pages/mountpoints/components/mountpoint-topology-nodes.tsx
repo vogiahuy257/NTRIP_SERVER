@@ -3,6 +3,7 @@ import type { Node, NodeProps } from '@xyflow/react';
 import {
     CircleUserRound,
     RadioTower,
+    Route,
     Server,
     Wifi,
     WifiOff,
@@ -49,6 +50,9 @@ export type RoverNodeData = {
     sessionCount: number;
     accountStatus: RoverTopologyStatus;
     accessEnabled: boolean;
+    autoMountpoint: boolean;
+    autoState: 'waiting_for_gga' | 'waiting_for_base' | 'assigned' | null;
+    mountpointSwitchCount: number;
 };
 
 export type TopologyNode =
@@ -276,9 +280,17 @@ export function RoverTopologyNode({
                     </span>
 
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold">
-                            {data.label}
-                        </p>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                            <p className="truncate text-xs font-semibold">
+                                {data.label}
+                            </p>
+                            {data.autoMountpoint ? (
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ntrip-teal/12 px-1.5 py-0.5 text-[8px] font-semibold tracking-[0.08em] text-ntrip-teal uppercase">
+                                    <Route className="size-2.5" />
+                                    Auto
+                                </span>
+                            ) : null}
+                        </div>
                         <p className="mt-0.5 truncate font-mono text-2xs text-ntrip-cloud/45">
                             {data.username ?? data.remoteIp ?? 'Unknown Rover'}
                         </p>
@@ -291,7 +303,9 @@ export function RoverTopologyNode({
                         className="ntrip-status-inline inline-flex items-center gap-1.5"
                     >
                         <span className="ntrip-status-inline__dot size-2 rounded-full" />
-                        {state.label}
+                        {data.autoMountpoint && data.autoState !== null
+                            ? data.autoState.replaceAll('_', ' ')
+                            : state.label}
                     </span>
 
                     <span className="font-mono text-ntrip-cloud/52">

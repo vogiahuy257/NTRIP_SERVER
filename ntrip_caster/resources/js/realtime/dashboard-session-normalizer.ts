@@ -1,4 +1,5 @@
 import type {
+    DashboardAutoMountpointState,
     DashboardRoverFixType,
     DashboardSession,
     DashboardSessionMountpoint,
@@ -67,6 +68,46 @@ function asNullableInteger(value: unknown): number | null {
     const parsed = asNullableNumber(value);
 
     return parsed === null ? null : Math.max(0, Math.trunc(parsed));
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+
+    if (typeof value === 'number') {
+        return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+        const normalised = value.trim().toLowerCase();
+
+        if (['1', 'true', 'yes', 'on'].includes(normalised)) {
+            return true;
+        }
+
+        if (['0', 'false', 'no', 'off'].includes(normalised)) {
+            return false;
+        }
+    }
+
+    return fallback;
+}
+
+function normaliseAutoMountpointState(
+    value: unknown,
+): DashboardAutoMountpointState | null {
+    const state = asNullableString(value)?.toLowerCase();
+
+    if (
+        state === 'waiting_for_gga' ||
+        state === 'waiting_for_base' ||
+        state === 'assigned'
+    ) {
+        return state;
+    }
+
+    return null;
 }
 
 function asCoordinate(
@@ -270,6 +311,18 @@ export function normaliseDashboardSession(
 
         roverPositionReceivedAt: asNullableString(
             session.rover_position_received_at,
+        ),
+
+        requestedMountpoint: asNullableString(session.requested_mountpoint),
+
+        autoMountpoint: asBoolean(session.auto_mountpoint),
+
+        autoState: normaliseAutoMountpointState(session.auto_state),
+
+        mountpointSwitchCount: asNumber(session.mountpoint_switch_count, 0),
+
+        lastMountpointSwitchAt: asNullableString(
+            session.last_mountpoint_switch_at,
         ),
 
         roverAccount: normaliseRoverAccount(session.rover_account),

@@ -40,6 +40,9 @@ export type DashboardStation = {
 
 export type NtripSessionConnectionType = 'source' | 'rover';
 
+export type DashboardAutoMountpointState =
+    'waiting_for_gga' | 'waiting_for_base' | 'assigned';
+
 export type DashboardRoverFixType =
     | 'no_fix'
     | 'gps_fix'
@@ -113,6 +116,12 @@ export type DashboardSession = {
     roverGgaUtc: string | null;
     roverGgaReceivedAt: string | null;
     roverPositionReceivedAt: string | null;
+
+    requestedMountpoint: string | null;
+    autoMountpoint: boolean;
+    autoState: DashboardAutoMountpointState | null;
+    mountpointSwitchCount: number;
+    lastMountpointSwitchAt: string | null;
 
     roverAccount: DashboardSessionRoverAccount | null;
     mountpoint: DashboardSessionMountpoint | null;

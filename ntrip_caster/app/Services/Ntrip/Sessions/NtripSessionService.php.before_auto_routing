@@ -162,68 +162,6 @@ final class NtripSessionService
         return $session;
     }
 
-    public function assignAutoMountpoint(
-        int $sessionId,
-        ?int $mountpointId,
-    ): bool {
-        return DB::transaction(
-            function () use ($sessionId, $mountpointId): bool {
-                $session = NtripSession::query()
-                    ->active()
-                    ->rovers()
-                    ->where('auto_mountpoint', true)
-                    ->lockForUpdate()
-                    ->find($sessionId);
-
-                if ($session === null) {
-                    return false;
-                }
-
-                $previousMountpointId = $session->mountpoint_id === null
-                    ? null
-                    : (int) $session->mountpoint_id;
-
-                if ($previousMountpointId === $mountpointId) {
-                    return true;
-                }
-
-                $switchCount = (int) $session->mountpoint_switch_count;
-                $initialAssignment = $previousMountpointId === null
-                    && $switchCount === 0
-                    && $session->last_mountpoint_switch_at === null;
-                $changedAt = now();
-
-                if (! $initialAssignment) {
-                    $switchCount++;
-                }
-
-                $session->forceFill([
-                    'mountpoint_id' => $mountpointId,
-                    'mountpoint_switch_count' => $switchCount,
-                    'last_mountpoint_switch_at' => $initialAssignment
-                        ? null
-                        : $changedAt,
-                ])->save();
-
-                $session->unsetRelation('mountpoint');
-                $session->load([
-                    'roverAccount:id,username,display_name',
-                    'mountpoint:id,station_id,name',
-                    'mountpoint.station:id,device_id,name',
-                ]);
-
-                $this->broadcastAfterCommit(
-                    new NtripSessionUpdated(
-                        session: $this->payloads->make($session),
-                        occurredAt: $changedAt->toIso8601String(),
-                    ),
-                );
-
-                return true;
-            },
-        );
-    }
-
     /**
      * @param  array<array-key, int>|null  $rtcmMessageCounts
      */

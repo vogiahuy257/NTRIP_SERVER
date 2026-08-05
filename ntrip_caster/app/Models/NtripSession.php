@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
@@ -17,6 +19,11 @@ class NtripSession extends Model
 
     protected $fillable = [
         'mountpoint_id',
+        'requested_mountpoint',
+        'auto_mountpoint',
+        'mountpoint_switch_count',
+        'last_mountpoint_switch_at',
+
         'station_id',
         'rover_account_id',
         'connection_type',
@@ -48,6 +55,10 @@ class NtripSession extends Model
     protected function casts(): array
     {
         return [
+            'auto_mountpoint' => 'boolean',
+            'mountpoint_switch_count' => 'integer',
+            'last_mountpoint_switch_at' => 'datetime',
+
             'connected_at' => 'datetime',
             'disconnected_at' => 'datetime',
 
@@ -60,7 +71,6 @@ class NtripSession extends Model
             'rover_latitude' => 'float',
             'rover_longitude' => 'float',
             'rover_altitude_m' => 'float',
-
             'rover_geoid_separation_m' => 'float',
 
             'rover_fix_quality' => 'integer',
@@ -68,7 +78,6 @@ class NtripSession extends Model
             'rover_hdop' => 'float',
 
             'rover_gga_received_at' => 'datetime',
-
             'rover_position_received_at' => 'datetime',
         ];
     }

@@ -38,6 +38,11 @@ export type ActiveSession = {
     username: string | null;
     connectedAt: string | null;
     bytesTransferred: number;
+    requestedMountpoint: string | null;
+    autoMountpoint: boolean;
+    autoState: 'waiting_for_gga' | 'waiting_for_base' | 'assigned' | null;
+    mountpointSwitchCount: number;
+    lastMountpointSwitchAt: string | null;
 };
 
 export type MountpointWithSessions = MountpointRecord & {

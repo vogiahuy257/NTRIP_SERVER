@@ -127,3 +127,60 @@ test('source session stores Station identity', function (): void {
         ->and($session->rover_account_id)->toBeNull()
         ->and($session->authenticated_username)->toBeNull();
 });
+
+test('AUTO Rover connection creates an unassigned session', function (): void {
+    $mountpoint = Mountpoint::factory()->create();
+
+    $account = RoverAccount::factory()->create();
+
+    $account->mountpoints()->attach(
+        $mountpoint->id,
+        [
+            'enabled' => true,
+            'max_connections' => null,
+            'starts_at' => null,
+            'expires_at' => null,
+        ],
+    );
+
+    $result = $this->connections->connectAuto(
+        requestedMountpoint: 'AUTO',
+        headers: [
+            'authorization' => 'Basic '.base64_encode(
+                $account->username
+                .':'
+                .RoverAccountFactory::PASSWORD,
+            ),
+            'user-agent' => 'AUTO Rover Test',
+            'ntrip-version' => 'Ntrip/2.0',
+        ],
+        remoteIp: '10.5.10.60',
+    );
+
+    $session = $result->session?->fresh();
+
+    expect($result->allowed())->toBeTrue()
+        ->and($result->authentication->mountpoint)
+        ->toBeNull()
+        ->and($session)->not->toBeNull()
+        ->and($session?->mountpoint_id)->toBeNull()
+        ->and($session?->requested_mountpoint)->toBe('AUTO')
+        ->and($session?->auto_mountpoint)->toBeTrue()
+        ->and($session?->mountpoint_switch_count)->toBe(0)
+        ->and($session?->rover_account_id)->toBe($account->id);
+});
+
+test('denied AUTO Rover connection does not create a session', function (): void {
+    $result = $this->connections->connectAuto(
+        requestedMountpoint: 'AUTO',
+        headers: [],
+        remoteIp: '10.5.10.61',
+    );
+
+    expect($result->allowed())->toBeFalse()
+        ->and($result->authentication->code)->toBe(
+            RoverAuthenticationCode::CredentialsRequired,
+        )
+        ->and($result->session)->toBeNull()
+        ->and(NtripSession::query()->count())->toBe(0);
+});

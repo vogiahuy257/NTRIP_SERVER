@@ -269,4 +269,35 @@ return [
         'NTRIP_LOG_ROVER_GGA',
         false,
     ),
+    'auto_mountpoint' => [
+        'enabled' => env(
+            'NTRIP_AUTO_MOUNTPOINT_ENABLED',
+            true,
+        ),
+
+        'name' => env(
+            'NTRIP_AUTO_MOUNTPOINT_NAME',
+            'AUTO',
+        ),
+
+        'service_radius_meters' => (float) env(
+            'NTRIP_AUTO_SERVICE_RADIUS_METERS',
+            10_000,
+        ),
+
+        'switch_confirmation_seconds' => (int) env(
+            'NTRIP_AUTO_SWITCH_CONFIRMATION_SECONDS',
+            10,
+        ),
+
+        'switch_cooldown_seconds' => (int) env(
+            'NTRIP_AUTO_SWITCH_COOLDOWN_SECONDS',
+            30,
+        ),
+        
+        'access_refresh_seconds' => (int) env(
+            'NTRIP_AUTO_ACCESS_REFRESH_SECONDS',
+            10,
+        ),
+    ],
 ];

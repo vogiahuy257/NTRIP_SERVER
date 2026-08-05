@@ -40,6 +40,16 @@ export function mapDashboardSessionsToActiveSessions(
         connectedAt: session.connectedAt,
 
         bytesTransferred: session.bytesTransferred,
+
+        requestedMountpoint: session.requestedMountpoint,
+
+        autoMountpoint: session.autoMountpoint,
+
+        autoState: session.autoState,
+
+        mountpointSwitchCount: session.mountpointSwitchCount,
+
+        lastMountpointSwitchAt: session.lastMountpointSwitchAt,
     }));
 }
 

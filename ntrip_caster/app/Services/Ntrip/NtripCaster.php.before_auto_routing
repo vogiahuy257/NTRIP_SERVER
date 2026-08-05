@@ -8,8 +8,6 @@ use App\Models\Mountpoint;
 use App\Models\Station;
 use App\Services\Devices\PendingDeviceProvisioningService;
 use App\Services\Ntrip\Auth\RoverConnectionService;
-use App\Services\Ntrip\AutoMountpoint\AutoMountpointCoordinator;
-use App\Services\Ntrip\AutoMountpoint\AutoMountpointSwitchPolicy;
 use App\Services\Ntrip\Devices\SourceDeviceDiscoveryOutcome;
 use App\Services\Ntrip\Devices\SourceDeviceDiscoveryService;
 use App\Services\Ntrip\Sessions\NtripSessionService;
@@ -40,12 +38,6 @@ class NtripCaster
      *     }>,
      *     mountpoint: ?string,
      *     mountpoint_id: ?int,
-     *     requested_mountpoint: ?string,
-     *     auto_mountpoint: bool,
-     *     auto_outside_since: ?int,
-     *     auto_last_switch_at: ?int,
-     *     last_rover_latitude: ?float,
-     *     last_rover_longitude: ?float,
      *     pending_device_id: ?int,
      *     station_id: ?int,
      *     rover_account_id: ?int,
@@ -80,8 +72,6 @@ class NtripCaster
         private readonly RoverConnectionService $roverConnections,
         private readonly NtripSessionService $sessions,
         private readonly NmeaGgaParser $ggaParser,
-        private readonly AutoMountpointCoordinator $autoMountpoints,
-        private readonly AutoMountpointSwitchPolicy $autoSwitchPolicy,
         private readonly SourceDeviceDiscoveryService $sourceDeviceDiscovery,
         private readonly PendingDeviceProvisioningService $deviceProvisioning,
         private readonly RtcmFlowMetricsSink $flowMetrics,
@@ -286,10 +276,6 @@ class NtripCaster
             'mountpoint_id' => null,
             'requested_mountpoint' => null,
             'auto_mountpoint' => false,
-            'auto_outside_since' => null,
-            'auto_last_switch_at' => null,
-            'last_rover_latitude' => null,
-            'last_rover_longitude' => null,
             'station_id' => null,
             'pending_device_id' => null,
             'rover_account_id' => null,
@@ -548,109 +534,35 @@ class NtripCaster
         }
 
         $position = $this->ggaParser->parse($line);
-        $sessionId = $this->clients[$clientId]['session_id'];
 
-        if ($position === null || $sessionId === null) {
-            return;
-        }
+        $sessionId =
+            $this->clients[$clientId]['session_id'];
 
         if (
-            $position['latitude'] !== null
-            && $position['longitude'] !== null
-        ) {
-            $client = $this->clients[$clientId];
-            $client['last_rover_latitude'] = $position['latitude'];
-            $client['last_rover_longitude'] = $position['longitude'];
-            $this->clients[$clientId] = $client;
-        }
-
-        $this->persistRoverGgaIfDue(
-            clientId: $clientId,
-            sessionId: $sessionId,
-            position: $position,
-            logger: $logger,
-        );
-
-        if (
-            $position['fix_quality'] < 1
-            || $position['latitude'] === null
-            || $position['longitude'] === null
+            $position === null
+            || $sessionId === null
         ) {
             return;
         }
 
         try {
-            $this->routeAutoRover(
-                clientId: $clientId,
-                latitude: $position['latitude'],
-                longitude: $position['longitude'],
-                logger: $logger,
-            );
-        } catch (Throwable $exception) {
-            report($exception);
+            $updated =
+                $this->sessions->updateRoverPosition(
+                    sessionId: $sessionId,
+                    position: $position,
+                );
 
-            $logger(
-                sprintf(
-                    'AUTO routing failed for session %d',
-                    $sessionId,
-                ),
-            );
-        }
-    }
-
-    /**
-     * @param array{
-     *     utc_time: string,
-     *     latitude: ?float,
-     *     longitude: ?float,
-     *     altitude_m: ?float,
-     *     geoid_separation_m: ?float,
-     *     fix_quality: int,
-     *     fix_type: string,
-     *     satellites: int,
-     *     hdop: float
-     * } $position
-     */
-    private function persistRoverGgaIfDue(
-        int $clientId,
-        int $sessionId,
-        array $position,
-        callable $logger,
-    ): void {
-        $nowNs = $this->monotonicNowNs();
-        $minimumIntervalNs = max(
-            0,
-            (int) config(
-                'ntrip.rover_gga_min_interval_ms',
-                1000,
-            ),
-        ) * 1_000_000;
-
-        $lastPersistedAtNs =
-            $this->clients[$clientId]['last_gga_persisted_at_ns'];
-
-        if (
-            $lastPersistedAtNs > 0
-            && $nowNs - $lastPersistedAtNs < $minimumIntervalNs
-        ) {
-            return;
-        }
-
-        try {
-            $updated = $this->sessions->updateRoverPosition(
-                sessionId: $sessionId,
-                position: $position,
-            );
-
-            if (! $updated) {
-                return;
-            }
-
-            $client = $this->clients[$clientId];
-            $client['last_gga_persisted_at_ns'] = $nowNs;
-            $this->clients[$clientId] = $client;
-
-            if ((bool) config('ntrip.log_rover_gga', false)) {
+            /*
+             * Mặc định không log mỗi GGA vì khi có nhiều Rover
+             * sẽ tạo lượng log rất lớn.
+             */
+            if (
+                $updated
+                && (bool) config(
+                    'ntrip.log_rover_gga',
+                    false,
+                )
+            ) {
                 $logger(
                     sprintf(
                         'Rover GGA updated for session %d',
@@ -659,6 +571,10 @@ class NtripCaster
                 );
             }
         } catch (Throwable $exception) {
+            /*
+             * Một câu GGA hoặc lỗi database không được phép làm
+             * dừng toàn bộ tiến trình NTRIP Caster.
+             */
             report($exception);
 
             $logger(
@@ -668,269 +584,6 @@ class NtripCaster
                 ),
             );
         }
-    }
-
-    private function routeAutoRover(
-        int $clientId,
-        float $latitude,
-        float $longitude,
-        callable $logger,
-    ): void {
-        if (! isset($this->clients[$clientId])) {
-            return;
-        }
-
-        $client = $this->clients[$clientId];
-
-        if (
-            $client['state'] !== 'rover'
-            || $client['auto_mountpoint'] !== true
-            || $client['rover_account_id'] === null
-            || $client['session_id'] === null
-        ) {
-            return;
-        }
-
-        $occupancy = $this->autoMountpointOccupancy(
-            $client['rover_account_id'],
-        );
-
-        $decision = $this->autoMountpoints->decide(
-            roverAccountId: $client['rover_account_id'],
-
-            roverLatitude: $latitude,
-            roverLongitude: $longitude,
-
-            currentMountpointId: $client['mountpoint_id'],
-
-            catalog: $this->catalog,
-
-            connectedMountpoints: $this->connectedSourceMountpoints(),
-            activeMountpointCounts: $occupancy['mountpoints'],
-            activeGrantCounts: $occupancy['grants'],
-        );
-
-        $transition =
-            $this->autoSwitchPolicy->evaluate(
-                decision: $decision,
-
-                currentMountpointId: $client['mountpoint_id'],
-
-                outsideSince: $client['auto_outside_since'],
-
-                lastSwitchAt: $client['auto_last_switch_at'],
-
-                now: time(),
-
-                confirmationSeconds: (int) config(
-                    'ntrip.auto_mountpoint.switch_confirmation_seconds',
-                    10,
-                ),
-
-                cooldownSeconds: (int) config(
-                    'ntrip.auto_mountpoint.switch_cooldown_seconds',
-                    30,
-                ),
-            );
-
-        $runtimeClient =
-            $this->clients[$clientId];
-
-        $runtimeClient['auto_outside_since'] =
-            $transition->outsideSince;
-
-        $this->clients[$clientId] =
-            $runtimeClient;
-
-        if (! $transition->apply) {
-            return;
-        }
-
-        $this->applyAutoMountpointDecision(
-            clientId: $clientId,
-
-            mountpointId: $decision->mountpointId(),
-
-            mountpointName: $decision->mountpointName(),
-
-            reason: $decision->reason,
-
-            logger: $logger,
-        );
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function connectedSourceMountpoints(): array
-    {
-        $mountpoints = [];
-
-        foreach ($this->clients as $client) {
-            if (
-                $client['state'] === 'source'
-                && $client['mountpoint'] !== null
-            ) {
-                $mountpoints[] =
-                    $client['mountpoint'];
-            }
-        }
-
-        return array_values(
-            array_unique($mountpoints),
-        );
-    }
-
-    /**
-     * @return array{
-     *     mountpoints: array<int, int>,
-     *     grants: array<int, int>
-     * }
-     */
-    private function autoMountpointOccupancy(
-        int $roverAccountId,
-    ): array {
-        $mountpointCounts = [];
-        $grantCounts = [];
-
-        foreach ($this->clients as $client) {
-            if (
-                $client['state'] !== 'rover'
-                || $client['mountpoint_id'] === null
-            ) {
-                continue;
-            }
-
-            $mountpointId = $client['mountpoint_id'];
-            $mountpointCounts[$mountpointId] =
-                ($mountpointCounts[$mountpointId] ?? 0) + 1;
-
-            if ($client['rover_account_id'] === $roverAccountId) {
-                $grantCounts[$mountpointId] =
-                    ($grantCounts[$mountpointId] ?? 0) + 1;
-            }
-        }
-
-        return [
-            'mountpoints' => $mountpointCounts,
-            'grants' => $grantCounts,
-        ];
-    }
-
-    private function applyAutoMountpointDecision(
-        int $clientId,
-        ?int $mountpointId,
-        ?string $mountpointName,
-        string $reason,
-        callable $logger,
-    ): void {
-        if (! isset($this->clients[$clientId])) {
-            return;
-        }
-
-        $client = $this->clients[$clientId];
-
-        $sessionId = $client['session_id'];
-
-        if (
-            $sessionId === null
-            || $client['mountpoint_id']
-                === $mountpointId
-        ) {
-            return;
-        }
-
-        $previousMountpointId =
-            $client['mountpoint_id'];
-
-        $previousMountpointName =
-            $client['mountpoint'];
-
-        $initialAssignment =
-            $previousMountpointId === null
-            && $client['auto_last_switch_at'] === null;
-
-        $updated =
-            $this->sessions->assignAutoMountpoint(
-                sessionId: $sessionId,
-                mountpointId: $mountpointId,
-            );
-
-        if (! $updated) {
-            return;
-        }
-
-        $this->clearRoverRtcmOutput(
-            $clientId,
-        );
-
-        if ($previousMountpointId !== null) {
-            $this->flowMetrics->roverDisconnected(
-                sessionId: $sessionId,
-                mountpointId: $previousMountpointId,
-            );
-        }
-
-        $runtimeClient =
-            $this->clients[$clientId];
-
-        $runtimeClient['mountpoint_id'] =
-            $mountpointId;
-
-        $runtimeClient['mountpoint'] =
-            $mountpointName;
-
-        $runtimeClient['auto_outside_since'] =
-            null;
-
-        if (! $initialAssignment) {
-            $runtimeClient['auto_last_switch_at'] =
-                time();
-        }
-
-        $this->clients[$clientId] =
-            $runtimeClient;
-
-        if ($mountpointId !== null) {
-            $this->flowMetrics->roverConnected(
-                sessionId: $sessionId,
-                mountpointId: $mountpointId,
-            );
-        }
-
-        $logger(
-            sprintf(
-                'AUTO rover session %d: %s -> %s (%s)',
-                $sessionId,
-                $previousMountpointName ?? 'NONE',
-                $mountpointName ?? 'NONE',
-                $reason,
-            ),
-        );
-    }
-
-    private function clearRoverRtcmOutput(
-        int $clientId,
-    ): void {
-        if (! isset($this->clients[$clientId])) {
-            return;
-        }
-
-        $client = &$this->clients[$clientId];
-
-        $protocolBytes = min(
-            $client['output_protocol_bytes'],
-            strlen($client['output_buffer']),
-        );
-
-        $client['output_buffer'] = substr(
-            $client['output_buffer'],
-            0,
-            $protocolBytes,
-        );
-
-        $client['rtcm_output_buffer_bytes'] = 0;
-        $client['rtcm_output_segments'] = [];
     }
 
     private function handleHandshake(int $clientId, string $rawHeader, callable $logger): void
@@ -1000,14 +653,6 @@ class NtripCaster
                 $matches[1]
             );
 
-            if ($this->rejectAutoSource(
-                clientId: $clientId,
-                mountpointName: $mountpointName,
-                logger: $logger,
-            )) {
-                return;
-            }
-
             /*
             * Discovery phải chạy trước registerSource().
             *
@@ -1054,14 +699,6 @@ class NtripCaster
             $mountpointName = rawurldecode(
                 $matches[2]
             );
-
-            if ($this->rejectAutoSource(
-                clientId: $clientId,
-                mountpointName: $mountpointName,
-                logger: $logger,
-            )) {
-                return;
-            }
 
             $this->registerSource(
                 $clientId,
@@ -1240,14 +877,6 @@ class NtripCaster
         array $headers,
         callable $logger
     ): void {
-        if ($this->rejectAutoSource(
-            clientId: $clientId,
-            mountpointName: $mountpointName,
-            logger: $logger,
-        )) {
-            return;
-        }
-
         $entry = $this->catalog[$mountpointName]
             ?? null;
 
@@ -1460,9 +1089,8 @@ class NtripCaster
             logger: $logger,
         );
 
-        $identity = $account === null
-            ? 'anonymous'
-            : $account->username;
+        $identity = $account?->username
+            ?? 'anonymous';
 
         $logger(
             "Rover {$identity} connected to {$mountpointName}",
@@ -1593,25 +1221,28 @@ class NtripCaster
     private function isAutoMountpoint(
         string $mountpointName,
     ): bool {
-        return (bool) config(
-            'ntrip.auto_mountpoint.enabled',
-            false,
-        ) && $this->isReservedAutoMountpoint(
-            $mountpointName,
-        );
-    }
+        if (
+            ! (bool) config(
+                'ntrip.auto_mountpoint.enabled',
+                false,
+            )
+        ) {
+            return false;
+        }
 
-    private function isReservedAutoMountpoint(
-        string $mountpointName,
-    ): bool {
-        $configuredName = $this->autoMountpointName();
+        $configuredName =
+            $this->autoMountpointName();
 
         if ($configuredName === '') {
             return false;
         }
 
+        $requestedName = trim(
+            ltrim($mountpointName, '/'),
+        );
+
         return strcasecmp(
-            trim(ltrim($mountpointName, '/')),
+            $requestedName,
             $configuredName,
         ) === 0;
     }
@@ -1634,27 +1265,7 @@ class NtripCaster
         return "HTTP/1.1 200 OK\r\n"
             ."Content-Type: gnss/data\r\n"
             ."Ntrip-Version: Ntrip/2.0\r\n"
-            ."Connection: keep-alive\r\n\r\n";
-    }
-
-    private function rejectAutoSource(
-        int $clientId,
-        string $mountpointName,
-        callable $logger,
-    ): bool {
-        if (! $this->isReservedAutoMountpoint($mountpointName)) {
-            return false;
-        }
-
-        $this->queueAndClose(
-            $clientId,
-            "HTTP/1.1 403 Forbidden\r\n"
-                ."Connection: close\r\n\r\n",
-            'auto_mountpoint_rover_only',
-            $logger,
-        );
-
-        return true;
+            ."Connection: close\r\n\r\n";
     }
 
     private function roverDeniedResponse(
@@ -2161,9 +1772,6 @@ class NtripCaster
             if (
                 ! $entry['mountpoint_enabled']
                 || ! $entry['station_enabled']
-                || $this->isReservedAutoMountpoint(
-                    (string) $entry['name'],
-                )
             ) {
                 continue;
             }
@@ -2189,7 +1797,6 @@ class NtripCaster
             );
         }
 
-        $body .= $this->autoSourcetableEntry();
         $body .= "ENDSOURCETABLE\r\n";
 
         $response =
@@ -2205,25 +1812,6 @@ class NtripCaster
             $response,
             'sourcetable_sent',
             $logger
-        );
-    }
-
-    private function autoSourcetableEntry(): string
-    {
-        $name = $this->autoMountpointName();
-
-        if (
-            ! (bool) config('ntrip.auto_mountpoint.enabled', false)
-            || $name === ''
-        ) {
-            return '';
-        }
-
-        return sprintf(
-            'STR;%s;Automatic nearest RTK source;RTCM 3.x;;2;'
-                .'GPS+GLO+GAL+BDS;AUTO;;0.0000000;0.0000000;'
-                ."1;0;Laravel-NTRIP-Caster;none;B;N;0;\r\n",
-            $name,
         );
     }
 
@@ -2286,12 +1874,12 @@ class NtripCaster
                 ];
             }
 
-            $this->catalog = $newCatalog;
-
             $this->disconnectInvalidClients(
                 $newCatalog,
                 $logger
             );
+
+            $this->catalog = $newCatalog;
         } catch (Throwable) {
             /*
              * Giữ catalog cũ khi SQLite tạm thời bị busy.
@@ -2473,16 +2061,6 @@ class NtripCaster
 
         unset($this->clients[$clientId]);
 
-        if (
-            $client['state'] === 'source'
-            && $client['mountpoint_id'] !== null
-        ) {
-            $this->rerouteAutoRoversUsingMountpoint(
-                mountpointId: $client['mountpoint_id'],
-                logger: $logger,
-            );
-        }
-
         @fclose($client['socket']);
 
         if ($client['session_id'] !== null) {
@@ -2575,111 +2153,58 @@ class NtripCaster
     /**
      * @param  array<string, array<string, mixed>>  $newCatalog
      */
-    /**
-     * @param  array<string, array<string, mixed>>  $newCatalog
-     */
-    private function disconnectInvalidClients(
-        array $newCatalog,
-        callable $logger,
-    ): void {
-        foreach ($this->clients as $clientId => $client) {
+    private function disconnectInvalidClients(array $newCatalog, callable $logger): void
+    {
+
+        foreach (array_keys($this->clients) as $clientId) {
+            $client = $this->clients[$clientId];
 
             if (
                 ! in_array(
                     $client['state'],
                     ['source', 'rover'],
-                    true,
+                    true
                 )
-                || $client['mountpoint'] === null
             ) {
                 continue;
             }
 
-            $entry = $newCatalog[$client['mountpoint']] ?? null;
-            $reason = match (true) {
-                $entry === null => 'mountpoint_removed',
-                ! $entry['station_enabled'] => 'station_disabled',
-                ! $entry['mountpoint_enabled'] => 'mountpoint_disabled',
-                default => null,
-            };
+            $mountpointName = $client['mountpoint'];
 
-            if ($reason === null) {
+            if ($mountpointName === null) {
                 continue;
             }
 
-            if (
-                $client['state'] === 'rover'
-                && $client['auto_mountpoint'] === true
-            ) {
-                $this->rerouteAutoRoverAfterSourceLoss(
-                    clientId: $clientId,
-                    reason: $reason,
-                    logger: $logger,
+            $entry = $newCatalog[$mountpointName] ?? null;
+
+            if ($entry === null) {
+                $this->disconnectClient(
+                    $clientId,
+                    'mountpoint_removed',
+                    $logger
                 );
 
                 continue;
             }
 
-            $this->disconnectClient(
-                $clientId,
-                $reason,
-                $logger,
-            );
-        }
-    }
+            if (! $entry['station_enabled']) {
+                $this->disconnectClient(
+                    $clientId,
+                    'station_disabled',
+                    $logger
+                );
 
-    private function rerouteAutoRoversUsingMountpoint(
-        int $mountpointId,
-        callable $logger,
-    ): void {
-        foreach ($this->clients as $clientId => $client) {
+                continue;
+            }
 
-            if (
-                $client['state'] === 'rover'
-                && $client['auto_mountpoint'] === true
-                && $client['mountpoint_id'] === $mountpointId
-            ) {
-                $this->rerouteAutoRoverAfterSourceLoss(
-                    clientId: $clientId,
-                    reason: 'source_disconnected',
-                    logger: $logger,
+            if (! $entry['mountpoint_enabled']) {
+                $this->disconnectClient(
+                    $clientId,
+                    'mountpoint_disabled',
+                    $logger
                 );
             }
         }
-    }
-
-    private function rerouteAutoRoverAfterSourceLoss(
-        int $clientId,
-        string $reason,
-        callable $logger,
-    ): void {
-        $client = $this->clients[$clientId] ?? null;
-
-        if ($client === null) {
-            return;
-        }
-
-        if (
-            $client['last_rover_latitude'] !== null
-            && $client['last_rover_longitude'] !== null
-        ) {
-            $this->routeAutoRover(
-                clientId: $clientId,
-                latitude: $client['last_rover_latitude'],
-                longitude: $client['last_rover_longitude'],
-                logger: $logger,
-            );
-
-            return;
-        }
-
-        $this->applyAutoMountpointDecision(
-            clientId: $clientId,
-            mountpointId: null,
-            mountpointName: null,
-            reason: $reason,
-            logger: $logger,
-        );
     }
 
     private function hasConnectedSource(int $stationId): bool

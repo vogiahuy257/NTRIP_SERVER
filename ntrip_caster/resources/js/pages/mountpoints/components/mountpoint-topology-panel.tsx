@@ -14,7 +14,6 @@ import { LoaderCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { RoverAccount } from '@/features/rover-accounts/types';
-import { cn } from '@/lib/utils';
 
 import { formatBitrate, formatBytes } from '../lib/mountpoint-data';
 
@@ -46,6 +45,7 @@ export type SelectedTopologyEntity =
 type MountpointTopologyPanelProps = {
     mountpoints: MountpointWithSessions[];
     roverAccounts: RoverAccount[];
+    autoSessions: ActiveSession[];
     selectedEntity: SelectedTopologyEntity;
     onSelectEntity: (entity: SelectedTopologyEntity) => void;
 };
@@ -108,6 +108,7 @@ function summarizeRemoteIps(sessions: ActiveSession[]): string | null {
 function createTopology(
     mountpoints: MountpointWithSessions[],
     roverAccounts: RoverAccount[],
+    autoSessions: ActiveSession[],
 ): {
     nodes: TopologyNode[];
     edges: Edge[];
@@ -183,6 +184,9 @@ function createTopology(
                 (total, session) => total + session.bytesTransferred,
                 0,
             );
+            const autoSessions = accountSessions.filter(
+                (session) => session.autoMountpoint,
+            );
 
             return {
                 id: `account:${account.id}`,
@@ -200,6 +204,13 @@ function createTopology(
                     sessionCount: accountSessions.length,
                     accountStatus: account.status,
                     accessEnabled,
+                    autoMountpoint: autoSessions.length > 0,
+                    autoState: autoSessions[0]?.autoState ?? null,
+                    mountpointSwitchCount: autoSessions.reduce(
+                        (maximum, session) =>
+                            Math.max(maximum, session.mountpointSwitchCount),
+                        0,
+                    ),
                 },
             };
         });
@@ -232,6 +243,9 @@ function createTopology(
                     sessionCount: 1,
                     accountStatus: 'unregistered',
                     accessEnabled: true,
+                    autoMountpoint: session.autoMountpoint,
+                    autoState: session.autoState,
+                    mountpointSwitchCount: session.mountpointSwitchCount,
                 },
             });
         }
@@ -347,6 +361,15 @@ function createTopology(
                     sessionCount: hiddenSessionCount,
                     accountStatus: 'unregistered',
                     accessEnabled: true,
+                    autoMountpoint: hiddenRovers.some(
+                        (rover) => rover.data.autoMountpoint,
+                    ),
+                    autoState: null,
+                    mountpointSwitchCount: hiddenRovers.reduce(
+                        (maximum, rover) =>
+                            Math.max(maximum, rover.data.mountpointSwitchCount),
+                        0,
+                    ),
                 },
             });
 
@@ -363,6 +386,176 @@ function createTopology(
                     strokeLinecap: 'round',
                     strokeWidth: 1.5,
                     opacity: hiddenSessionCount > 0 ? 0.55 : 0.26,
+                },
+            });
+        }
+    }
+
+    if (autoSessions.length > 0) {
+        const autoRouterNodeId = 'station:auto-router';
+        const autoMountpointNodeId = 'mountpoint:auto';
+        const accountByUsername = new Map(
+            roverAccounts.map((account) => [
+                normalizeUsername(account.username),
+                account,
+            ]),
+        );
+
+        nodes.push({
+            id: autoRouterNodeId,
+            type: 'station',
+            position: { x: 0, y: 0 },
+            width: 250,
+            height: 105,
+            data: {
+                kind: 'station',
+                entityId: 'auto-router',
+                name: 'AUTO Router',
+                deviceId: 'VIRTUAL',
+                online: true,
+                mountpointCount: 1,
+            },
+        });
+
+        nodes.push({
+            id: autoMountpointNodeId,
+            type: 'mountpoint',
+            position: { x: 0, y: 0 },
+            width: 270,
+            height: 120,
+            data: {
+                kind: 'mountpoint',
+                entityId: 'AUTO',
+                name: 'AUTO',
+                identifier: 'Virtual mountpoint',
+                status: 'waiting-source',
+                registeredRoverCount: new Set(
+                    autoSessions
+                        .map((session) => normalizeUsername(session.username))
+                        .filter((username) => username !== ''),
+                ).size,
+                connectedRoverCount: autoSessions.length,
+                bitrate: 'Waiting for Base',
+            },
+        });
+
+        edges.push({
+            id: 'edge:station:auto-router:mountpoint:auto',
+            source: autoRouterNodeId,
+            target: autoMountpointNodeId,
+            type: 'default',
+            className: 'ntrip-topology-edge',
+            animated: true,
+            interactionWidth: 24,
+            style: {
+                strokeDasharray: '5 7',
+                strokeLinecap: 'round',
+                strokeWidth: 1.8,
+                opacity: 0.72,
+            },
+        });
+
+        const visibleAutoSessions = autoSessions.slice(
+            0,
+            MAX_VISIBLE_ROVERS_PER_MOUNTPOINT,
+        );
+
+        for (const session of visibleAutoSessions) {
+            const account = accountByUsername.get(
+                normalizeUsername(session.username),
+            );
+            const roverNodeId = `rover:auto:${session.id}`;
+
+            nodes.push({
+                id: roverNodeId,
+                type: 'rover',
+                position: { x: 0, y: 0 },
+                width: 250,
+                height: 108,
+                data: {
+                    kind: 'rover',
+                    entityId: session.id,
+                    accountId: account?.id ?? null,
+                    label:
+                        account?.displayName ??
+                        account?.username ??
+                        session.username ??
+                        'AUTO Rover',
+                    displayName: account?.displayName ?? null,
+                    remoteIp: session.remoteIp,
+                    username: session.username,
+                    bytesTransferred: formatBytes(session.bytesTransferred),
+                    connected: true,
+                    sessionCount: 1,
+                    accountStatus: account?.status ?? 'unregistered',
+                    accessEnabled: true,
+                    autoMountpoint: true,
+                    autoState: session.autoState,
+                    mountpointSwitchCount: session.mountpointSwitchCount,
+                },
+            });
+
+            edges.push({
+                id: `edge:${autoMountpointNodeId}:${roverNodeId}`,
+                source: autoMountpointNodeId,
+                target: roverNodeId,
+                type: 'default',
+                className: 'ntrip-topology-edge',
+                animated: true,
+                interactionWidth: 24,
+                style: {
+                    strokeDasharray: '5 7',
+                    strokeLinecap: 'round',
+                    strokeWidth: 1.8,
+                    opacity: 0.72,
+                },
+            });
+        }
+
+        const hiddenAutoSessionCount =
+            autoSessions.length - visibleAutoSessions.length;
+
+        if (hiddenAutoSessionCount > 0) {
+            const roverNodeId = 'rover:auto:overflow';
+
+            nodes.push({
+                id: roverNodeId,
+                type: 'rover',
+                position: { x: 0, y: 0 },
+                width: 250,
+                height: 108,
+                data: {
+                    kind: 'rover',
+                    entityId: 'auto-overflow',
+                    accountId: null,
+                    label: `+${hiddenAutoSessionCount} waiting AUTO Rovers`,
+                    displayName: null,
+                    remoteIp: null,
+                    username: null,
+                    bytesTransferred: 'Hidden by topology limit',
+                    connected: true,
+                    sessionCount: hiddenAutoSessionCount,
+                    accountStatus: 'unregistered',
+                    accessEnabled: true,
+                    autoMountpoint: true,
+                    autoState: 'waiting_for_base',
+                    mountpointSwitchCount: 0,
+                },
+            });
+
+            edges.push({
+                id: `edge:${autoMountpointNodeId}:${roverNodeId}`,
+                source: autoMountpointNodeId,
+                target: roverNodeId,
+                type: 'default',
+                className: 'ntrip-topology-edge',
+                animated: true,
+                interactionWidth: 24,
+                style: {
+                    strokeDasharray: '5 7',
+                    strokeLinecap: 'round',
+                    strokeWidth: 1.5,
+                    opacity: 0.5,
                 },
             });
         }
@@ -418,12 +611,13 @@ async function applyElkLayout(
 function MountpointTopologyCanvas({
     mountpoints,
     roverAccounts,
+    autoSessions,
     selectedEntity,
     onSelectEntity,
 }: MountpointTopologyPanelProps) {
     const topology = useMemo(
-        () => createTopology(mountpoints, roverAccounts),
-        [mountpoints, roverAccounts],
+        () => createTopology(mountpoints, roverAccounts, autoSessions),
+        [autoSessions, mountpoints, roverAccounts],
     );
     const topologyRef = useRef(topology);
     useEffect(() => {
@@ -579,7 +773,7 @@ function MountpointTopologyCanvas({
     }, [selectedEntity, setNodes]);
 
     return (
-        <div className="relative h-full min-h-136 overflow-hidden rounded-card-lg border border-ntrip-cloud/10 bg-ntrip-ink">
+        <div className="relative h-full min-h-0 overflow-hidden bg-ntrip-ink">
             <ReactFlow<TopologyNode, Edge>
                 nodes={nodes}
                 edges={edges}
@@ -607,7 +801,7 @@ function MountpointTopologyCanvas({
                 />
 
                 <Controls
-                    position="bottom-left"
+                    position="bottom-right"
                     showInteractive={false}
                     className="ntrip-topology-controls"
                 />
@@ -622,13 +816,17 @@ function MountpointTopologyCanvas({
                 </div>
             ) : null}
 
-            <div
-                className={cn(
-                    'pointer-events-none absolute right-4 bottom-4 rounded-full border px-3 py-1.5 text-2xs font-medium backdrop-blur-xl',
-                    'border-ntrip-cloud/10 bg-ntrip-ink/76 text-ntrip-cloud/48',
+            <div className="pointer-events-none absolute top-3 left-1/2 z-10 hidden w-[min(42rem,calc(100%-8rem))] -translate-x-1/2 grid-cols-3 gap-2 lg:grid">
+                {['Source stations', 'Mountpoints', 'Rover clients'].map(
+                    (label) => (
+                        <div
+                            key={label}
+                            className="rounded-full border border-ntrip-cloud/8 bg-ntrip-ink/68 px-3 py-1.5 text-center text-[9px] font-semibold tracking-[0.12em] text-ntrip-cloud/38 uppercase backdrop-blur-xl"
+                        >
+                            {label}
+                        </div>
+                    ),
                 )}
-            >
-                Drag nodes · Drag pane to pan · Scroll to zoom
             </div>
         </div>
     );
