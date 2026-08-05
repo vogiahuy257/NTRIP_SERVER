@@ -413,6 +413,28 @@ export default function MountpointsIndex() {
         dashboardError;
     const realtimeActive = realtimeConnectionState === 'connected';
 
+    const handleSelectEntity = useCallback(
+        (entity: SelectedTopologyEntity): void => {
+            setSelectedEntity(entity);
+
+            if (isMobile && entity !== null) {
+                setOperationsCollapsed(true);
+            }
+        },
+        [isMobile],
+    );
+
+    const handleOperationsCollapsedChange = useCallback(
+        (collapsed: boolean): void => {
+            setOperationsCollapsed(collapsed);
+
+            if (isMobile && !collapsed) {
+                setSelectedEntity(null);
+            }
+        },
+        [isMobile],
+    );
+
     return (
         <>
             <Head title="Mountpoints" />
@@ -422,14 +444,14 @@ export default function MountpointsIndex() {
                     onPointerDown={stopMapEvent}
                     onDoubleClick={stopMapEvent}
                     onWheel={stopMapEvent}
-                    className="pointer-events-auto absolute inset-0 overflow-hidden rounded-2xl border border-white/26 bg-ntrip-ink shadow-ntrip-panel"
+                    className="pointer-events-auto absolute inset-0 overflow-hidden rounded-[1.75rem] border border-white/24 bg-ntrip-ink shadow-ntrip-panel"
                 >
                     {loading ? (
                         <div className="grid h-full place-items-center bg-ntrip-ink text-ntrip-cloud">
                             <div className="text-center">
                                 <RefreshCw className="mx-auto size-5 animate-spin text-ntrip-teal" />
                                 <p className="mt-3 text-xs font-semibold">
-                                    Loading mountpoint topology
+                                    Loading topology
                                 </p>
                             </div>
                         </div>
@@ -439,14 +461,14 @@ export default function MountpointsIndex() {
                             roverAccounts={topologyRoverAccounts}
                             autoSessions={filteredAutoSessions}
                             selectedEntity={selectedEntity}
-                            onSelectEntity={setSelectedEntity}
+                            onSelectEntity={handleSelectEntity}
                         />
                     )}
                 </section>
 
                 <MountpointOperationsPanel
                     collapsed={operationsCollapsed}
-                    onCollapsedChange={setOperationsCollapsed}
+                    onCollapsedChange={handleOperationsCollapsedChange}
                     mountpoints={enrichedMountpoints}
                     visibleMountpoints={filteredMountpoints}
                     autoSessions={filteredAutoSessions}
@@ -457,39 +479,22 @@ export default function MountpointsIndex() {
                     statusFilter={statusFilter}
                     onStatusFilterChange={setStatusFilter}
                     selectedEntity={selectedEntity}
-                    onSelectEntity={setSelectedEntity}
+                    onSelectEntity={handleSelectEntity}
                     updatingAccessModeIds={updatingAccessModeIds}
                     onAnonymousAccessChange={handleAnonymousAccessChange}
                 />
 
-                <div className="pointer-events-auto absolute top-3 right-3 z-20 inline-flex h-8 items-center gap-2 rounded-full border border-ntrip-cloud/10 bg-ntrip-ink/78 px-3 text-2xs font-medium text-ntrip-cloud/64 backdrop-blur-xl">
-                    <span
-                        className={cn(
-                            'size-1.5 rounded-full',
-                            realtimeActive ? 'bg-ntrip-teal' : 'bg-ntrip-amber',
-                        )}
-                    />
-                    {realtimeActive ? 'Realtime' : 'Latest snapshot'}
-                    {unassignedAutoSessions.length > 0 ? (
-                        <>
-                            <span className="h-3 w-px bg-ntrip-cloud/12" />
-                            <span className="text-ntrip-amber">
-                                {unassignedAutoSessions.length} AUTO waiting
-                            </span>
-                        </>
-                    ) : null}
-                </div>
+                <NetworkStatusBar
+                    realtimeActive={realtimeActive}
+                    statistics={statistics}
+                    autoWaiting={unassignedAutoSessions.length}
+                />
 
                 {visibleError ? (
-                    <div className="pointer-events-auto absolute top-3 left-1/2 z-40 max-w-[min(32rem,calc(100%-7rem))] -translate-x-1/2 rounded-xl border border-ntrip-coral/25 bg-ntrip-ink/88 px-3 py-2 text-center text-micro font-medium text-ntrip-coral shadow-ntrip-panel backdrop-blur-xl">
+                    <div className="pointer-events-auto absolute top-4 left-1/2 z-50 max-w-[min(34rem,calc(100%-7rem))] -translate-x-1/2 rounded-full border border-ntrip-coral/24 bg-ntrip-ink/88 px-4 py-2 text-center text-micro font-medium text-ntrip-coral shadow-ntrip-panel backdrop-blur-2xl">
                         {visibleError}
                     </div>
                 ) : null}
-
-                <StatisticsDock
-                    statistics={statistics}
-                    operationsCollapsed={operationsCollapsed}
-                />
 
                 {selectedEntity ? (
                     <TopologyInspector
@@ -502,58 +507,115 @@ export default function MountpointsIndex() {
     );
 }
 
-function StatisticsDock({
+function NetworkStatusBar({
+    realtimeActive,
     statistics,
-    operationsCollapsed,
+    autoWaiting,
 }: {
+    realtimeActive: boolean;
     statistics: {
         total: number;
         online: number;
         waiting: number;
         accounts: number;
     };
-    operationsCollapsed: boolean;
+    autoWaiting: number;
 }) {
     return (
-        <div
-            className={cn(
-                'pointer-events-auto absolute bottom-3 z-20 hidden grid-cols-4 gap-1.5 transition-[left] duration-200 sm:grid',
-                operationsCollapsed ? 'left-[4.75rem]' : 'left-[21.75rem]',
-            )}
-        >
-            <Metric label="Total" value={statistics.total} />
-            <Metric label="Online" value={statistics.online} tone="teal" />
-            <Metric label="Waiting" value={statistics.waiting} tone="amber" />
-            <Metric label="Accounts" value={statistics.accounts} />
+        <div className="pointer-events-auto absolute top-4 right-4 z-20 flex h-10 items-center gap-2 rounded-full border border-ntrip-cloud/10 bg-ntrip-ink/76 px-3 text-2xs font-medium text-ntrip-cloud/66 shadow-ntrip-panel-soft backdrop-blur-2xl">
+            <span
+                className={cn(
+                    'size-1.5 rounded-full',
+                    realtimeActive ? 'bg-ntrip-teal' : 'bg-ntrip-amber',
+                )}
+            />
+            <span>{realtimeActive ? 'Realtime' : 'Snapshot'}</span>
+
+            <span className="hidden h-3 w-px bg-ntrip-cloud/12 sm:block" />
+            <span className="hidden sm:inline">
+                {statistics.online}/{statistics.total} online
+            </span>
+
+            {statistics.waiting > 0 ? (
+                <>
+                    <span className="hidden h-3 w-px bg-ntrip-cloud/12 sm:block" />
+                    <span className="text-ntrip-amber">
+                        {statistics.waiting} waiting
+                    </span>
+                </>
+            ) : null}
+
+            {autoWaiting > 0 ? (
+                <span className="hidden rounded-full bg-ntrip-amber/12 px-2 py-1 text-ntrip-amber md:inline">
+                    {autoWaiting} AUTO
+                </span>
+            ) : null}
         </div>
     );
 }
 
-function Metric({
-    label,
-    value,
-    tone = 'ink',
-}: {
+type InspectorRow = {
     label: string;
-    value: number;
-    tone?: 'ink' | 'teal' | 'amber';
-}) {
-    return (
-        <div className="min-w-16 rounded-xl border border-white/42 bg-ntrip-cloud/78 px-2.5 py-2 shadow-ntrip-panel-soft backdrop-blur-xl">
-            <p className="text-[8px] font-semibold tracking-[0.12em] text-ntrip-ink/36 uppercase">
-                {label}
-            </p>
-            <p
-                className={cn(
-                    'mt-0.5 text-sm font-semibold tabular-nums',
-                    tone === 'teal' && 'text-ntrip-teal',
-                    tone === 'amber' && 'text-ntrip-amber',
-                )}
-            >
-                {value}
-            </p>
-        </div>
-    );
+    value: string;
+};
+
+function inspectorRows(
+    entity: Exclude<SelectedTopologyEntity, null>,
+): InspectorRow[] {
+    if (entity.kind === 'station') {
+        return [
+            {
+                label: 'Status',
+                value: entity.online ? 'Source online' : 'Source offline',
+            },
+            { label: 'Device', value: entity.deviceId },
+            {
+                label: 'Mountpoints',
+                value: String(entity.mountpointCount),
+            },
+        ];
+    }
+
+    if (entity.kind === 'mountpoint') {
+        return [
+            {
+                label: 'Status',
+                value: entity.status.replaceAll('-', ' '),
+            },
+            {
+                label: 'Rovers',
+                value: String(entity.connectedRoverCount),
+            },
+            {
+                label: 'Registered',
+                value: String(entity.registeredRoverCount),
+            },
+            { label: 'Bitrate', value: entity.bitrate },
+        ];
+    }
+
+    return [
+        {
+            label: 'Status',
+            value: entity.autoMountpoint
+                ? (entity.autoState?.replaceAll('_', ' ') ?? 'AUTO')
+                : entity.connected
+                  ? 'Connected'
+                  : 'Offline',
+        },
+        {
+            label: 'Username',
+            value: entity.username ?? 'Unregistered',
+        },
+        {
+            label: 'Sessions',
+            value: String(entity.sessionCount),
+        },
+        {
+            label: 'Transferred',
+            value: entity.bytesTransferred,
+        },
+    ];
 }
 
 function TopologyInspector({
@@ -569,19 +631,20 @@ function TopologyInspector({
             : entity.kind === 'mountpoint'
               ? RadioTower
               : Wifi;
+    const rows = inspectorRows(entity);
 
     return (
-        <aside className="pointer-events-auto absolute right-3 bottom-14 z-30 max-h-[42vh] w-[min(18rem,calc(100%-1.5rem))] overflow-y-auto rounded-2xl border border-ntrip-cloud/12 bg-ntrip-ink/90 p-3 text-ntrip-cloud shadow-ntrip-topology-panel backdrop-blur-2xl">
-            <div className="flex items-start gap-2.5">
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ntrip-teal/13 text-ntrip-teal">
-                    <Icon className="size-3.5" />
+        <aside className="pointer-events-auto absolute right-3 bottom-3 left-3 z-30 max-h-[42dvh] overflow-y-auto rounded-[1.5rem] border border-ntrip-cloud/12 bg-ntrip-ink/92 p-4 text-ntrip-cloud shadow-ntrip-topology-panel backdrop-blur-2xl sm:right-4 sm:bottom-4 sm:left-auto sm:w-[17rem]">
+            <div className="flex items-start gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ntrip-teal/13 text-ntrip-teal">
+                    <Icon className="size-4" />
                 </span>
 
                 <div className="min-w-0 flex-1">
-                    <p className="text-[8px] font-semibold tracking-[0.12em] text-ntrip-cloud/36 uppercase">
+                    <p className="text-3xs font-semibold tracking-[0.12em] text-ntrip-cloud/36 uppercase">
                         {entity.kind}
                     </p>
-                    <h2 className="mt-0.5 truncate text-xs font-semibold">
+                    <h2 className="mt-0.5 truncate text-sm font-semibold">
                         {'name' in entity ? entity.name : entity.label}
                     </h2>
                 </div>
@@ -591,38 +654,25 @@ function TopologyInspector({
                     variant="ghost"
                     size="icon"
                     onClick={onClose}
-                    className="size-7 rounded-lg text-ntrip-cloud/42 hover:bg-ntrip-cloud/8 hover:text-ntrip-cloud"
-                    aria-label="Close topology details"
+                    className="size-10 rounded-xl text-ntrip-cloud/42 hover:bg-ntrip-cloud/8 hover:text-ntrip-cloud"
+                    aria-label="Close details"
                 >
-                    <X className="size-3.5" />
+                    <X className="size-4" />
                 </Button>
             </div>
 
-            <dl className="mt-3 space-y-1.5 border-t border-ntrip-cloud/8 pt-3 text-2xs">
-                {Object.entries(entity)
-                    .filter(
-                        ([key]) =>
-                            !['kind', 'entityId', 'name', 'label'].includes(
-                                key,
-                            ),
-                    )
-                    .map(([key, value]) => (
-                        <div
-                            key={key}
-                            className="flex items-start justify-between gap-3"
-                        >
-                            <dt className="text-ntrip-cloud/38 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1')}
-                            </dt>
-                            <dd className="max-w-[58%] text-right font-medium text-ntrip-cloud/72">
-                                {typeof value === 'boolean'
-                                    ? value
-                                        ? 'Yes'
-                                        : 'No'
-                                    : String(value ?? '—')}
-                            </dd>
-                        </div>
-                    ))}
+            <dl className="mt-4 divide-y divide-ntrip-cloud/8 border-t border-ntrip-cloud/8 text-2xs">
+                {rows.map((row) => (
+                    <div
+                        key={row.label}
+                        className="flex items-center justify-between gap-4 py-2.5"
+                    >
+                        <dt className="text-ntrip-cloud/40">{row.label}</dt>
+                        <dd className="max-w-[62%] truncate text-right font-medium text-ntrip-cloud/76 capitalize">
+                            {row.value}
+                        </dd>
+                    </div>
+                ))}
             </dl>
         </aside>
     );

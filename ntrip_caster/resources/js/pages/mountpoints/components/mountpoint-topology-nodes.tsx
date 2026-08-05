@@ -93,12 +93,40 @@ function NodeShell({
     return (
         <div
             className={cn(
-                'min-w-60 rounded-control border px-3.5 py-3 shadow-ntrip-node transition',
-                'border-ntrip-cloud/12 bg-ntrip-ink/94 text-ntrip-cloud',
-                selected && 'border-ntrip-teal/72 shadow-ntrip-node-selected',
+                'w-[13.75rem] rounded-[1.1rem] border px-3 py-2.5 shadow-ntrip-node transition',
+                'border-ntrip-cloud/10 bg-ntrip-ink/92 text-ntrip-cloud backdrop-blur-xl',
+                selected && 'border-ntrip-teal/68 shadow-ntrip-node-selected',
             )}
         >
             {children}
+        </div>
+    );
+}
+
+function StatusLine({
+    status,
+    label,
+    trailing,
+}: {
+    status: 'online' | 'waiting-source' | 'degraded' | 'disabled';
+    label: string;
+    trailing?: string;
+}) {
+    return (
+        <div className="mt-2.5 flex items-center justify-between gap-3 text-2xs">
+            <span
+                data-status={status}
+                className="ntrip-status-inline inline-flex min-w-0 items-center gap-1.5"
+            >
+                <span className="ntrip-status-inline__dot size-1.5 shrink-0 rounded-full" />
+                <span className="truncate">{label}</span>
+            </span>
+
+            {trailing ? (
+                <span className="shrink-0 font-mono text-ntrip-cloud/44">
+                    {trailing}
+                </span>
+            ) : null}
         </div>
     );
 }
@@ -110,35 +138,26 @@ export function StationTopologyNode({
     return (
         <>
             <NodeShell selected={selected}>
-                <div className="flex items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-control-sm bg-ntrip-cloud/8 text-ntrip-cloud/74">
-                        <Server className="size-4" />
+                <div className="flex items-center gap-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ntrip-cloud/7 text-ntrip-cloud/66">
+                        <Server className="size-3.5" />
                     </span>
 
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-caption font-semibold">
+                        <p className="truncate text-xs font-semibold">
                             {data.name}
                         </p>
-                        <p className="mt-0.5 truncate font-mono text-2xs text-ntrip-cloud/48">
+                        <p className="mt-0.5 truncate font-mono text-3xs text-ntrip-cloud/40">
                             {data.deviceId}
                         </p>
                     </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3 text-2xs">
-                    <span
-                        data-status={data.online ? 'online' : 'disabled'}
-                        className="ntrip-status-inline inline-flex items-center gap-1.5"
-                    >
-                        <span className="ntrip-status-inline__dot size-2 rounded-full" />
-                        {data.online ? 'Source online' : 'Source offline'}
-                    </span>
-
-                    <span className="rounded-full bg-ntrip-cloud/7 px-2 py-1 text-ntrip-cloud/58">
-                        {data.mountpointCount} mountpoint
-                        {data.mountpointCount === 1 ? '' : 's'}
-                    </span>
-                </div>
+                <StatusLine
+                    status={data.online ? 'online' : 'disabled'}
+                    label={data.online ? 'Source online' : 'Source offline'}
+                    trailing={`${data.mountpointCount} MP`}
+                />
             </NodeShell>
 
             <HiddenHandle type="source" position={Position.Right} />
@@ -155,49 +174,26 @@ export function MountpointTopologyNode({
             <HiddenHandle type="target" position={Position.Left} />
 
             <NodeShell selected={selected}>
-                <div className="flex items-start gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-control-xs bg-ntrip-teal/12 text-ntrip-teal">
-                        <RadioTower className="size-4" />
+                <div className="flex items-center gap-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-ntrip-teal/12 text-ntrip-teal">
+                        <RadioTower className="size-3.5" />
                     </span>
 
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-caption font-semibold">
+                        <p className="truncate font-mono text-xs font-semibold">
                             {data.name}
                         </p>
-                        <p className="mt-0.5 truncate text-2xs text-ntrip-cloud/46">
+                        <p className="mt-0.5 truncate text-3xs text-ntrip-cloud/40">
                             {data.identifier ?? 'NTRIP mountpoint'}
                         </p>
                     </div>
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-2xs">
-                    <span
-                        data-status={data.status}
-                        className="ntrip-status-inline inline-flex items-center gap-1.5"
-                    >
-                        <span className="ntrip-status-inline__dot size-2 rounded-full" />
-                        {STATUS_LABELS[data.status]}
-                    </span>
-
-                    <span className="rounded-full bg-ntrip-cloud/7 px-2 py-1 text-ntrip-cloud/58">
-                        {data.registeredRoverCount} registered
-                    </span>
-
-                    <span
-                        className={cn(
-                            'rounded-full px-2 py-1',
-                            data.connectedRoverCount > 0
-                                ? 'bg-ntrip-teal/12 text-ntrip-teal'
-                                : 'bg-ntrip-cloud/7 text-ntrip-cloud/58',
-                        )}
-                    >
-                        {data.connectedRoverCount} connected
-                    </span>
-
-                    <span className="rounded-full bg-ntrip-cloud/7 px-2 py-1 font-mono text-ntrip-cloud/58">
-                        {data.bitrate}
-                    </span>
-                </div>
+                <StatusLine
+                    status={data.status}
+                    label={STATUS_LABELS[data.status]}
+                    trailing={`${data.connectedRoverCount} R · ${data.bitrate}`}
+                />
             </NodeShell>
 
             <HiddenHandle type="source" position={Position.Right} />
@@ -210,19 +206,11 @@ function roverState(data: RoverNodeData): {
     dataStatus: 'online' | 'waiting-source' | 'disabled';
     iconClass: string;
 } {
-    if (!data.accessEnabled) {
+    if (!data.accessEnabled || data.accountStatus === 'disabled') {
         return {
             label: 'Access disabled',
             dataStatus: 'disabled',
-            iconClass: 'bg-ntrip-coral/12 text-ntrip-coral',
-        };
-    }
-
-    if (data.accountStatus === 'disabled') {
-        return {
-            label: 'Account disabled',
-            dataStatus: 'disabled',
-            iconClass: 'bg-ntrip-cloud/8 text-ntrip-cloud/46',
+            iconClass: 'bg-ntrip-coral/10 text-ntrip-coral',
         };
     }
 
@@ -244,11 +232,9 @@ function roverState(data: RoverNodeData): {
 
     return {
         label:
-            data.accountStatus === 'unregistered'
-                ? 'Unregistered session'
-                : 'Registered · Offline',
+            data.accountStatus === 'unregistered' ? 'Unregistered' : 'Offline',
         dataStatus: 'waiting-source',
-        iconClass: 'bg-ntrip-cloud/8 text-ntrip-cloud/62',
+        iconClass: 'bg-ntrip-cloud/7 text-ntrip-cloud/54',
     };
 }
 
@@ -257,25 +243,29 @@ export function RoverTopologyNode({
     selected,
 }: NodeProps<Node<RoverNodeData, 'rover'>>) {
     const state = roverState(data);
+    const statusLabel =
+        data.autoMountpoint && data.autoState !== null
+            ? data.autoState.replaceAll('_', ' ')
+            : state.label;
 
     return (
         <>
             <HiddenHandle type="target" position={Position.Left} />
 
             <NodeShell selected={selected}>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5">
                     <span
                         className={cn(
-                            'grid size-9 shrink-0 place-items-center rounded-control-xs',
+                            'grid size-8 shrink-0 place-items-center rounded-lg',
                             state.iconClass,
                         )}
                     >
                         {data.connected ? (
-                            <Wifi className="size-4" />
+                            <Wifi className="size-3.5" />
                         ) : data.username ? (
-                            <CircleUserRound className="size-4" />
+                            <CircleUserRound className="size-3.5" />
                         ) : (
-                            <WifiOff className="size-4" />
+                            <WifiOff className="size-3.5" />
                         )}
                     </span>
 
@@ -285,35 +275,23 @@ export function RoverTopologyNode({
                                 {data.label}
                             </p>
                             {data.autoMountpoint ? (
-                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ntrip-teal/12 px-1.5 py-0.5 text-[8px] font-semibold tracking-[0.08em] text-ntrip-teal uppercase">
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ntrip-teal/12 px-1.5 py-0.5 text-[8px] font-semibold text-ntrip-teal uppercase">
                                     <Route className="size-2.5" />
                                     Auto
                                 </span>
                             ) : null}
                         </div>
-                        <p className="mt-0.5 truncate font-mono text-2xs text-ntrip-cloud/45">
+                        <p className="mt-0.5 truncate font-mono text-3xs text-ntrip-cloud/40">
                             {data.username ?? data.remoteIp ?? 'Unknown Rover'}
                         </p>
                     </div>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between gap-3 text-2xs">
-                    <span
-                        data-status={state.dataStatus}
-                        className="ntrip-status-inline inline-flex items-center gap-1.5"
-                    >
-                        <span className="ntrip-status-inline__dot size-2 rounded-full" />
-                        {data.autoMountpoint && data.autoState !== null
-                            ? data.autoState.replaceAll('_', ' ')
-                            : state.label}
-                    </span>
-
-                    <span className="font-mono text-ntrip-cloud/52">
-                        {data.connected
-                            ? `${data.sessionCount} session${data.sessionCount === 1 ? '' : 's'} · ${data.bytesTransferred}`
-                            : '0 sessions'}
-                    </span>
-                </div>
+                <StatusLine
+                    status={state.dataStatus}
+                    label={statusLabel}
+                    trailing={`${data.sessionCount} session${data.sessionCount === 1 ? '' : 's'}`}
+                />
             </NodeShell>
         </>
     );

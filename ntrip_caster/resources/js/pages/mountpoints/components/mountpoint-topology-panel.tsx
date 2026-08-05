@@ -144,8 +144,8 @@ function createTopology(
             id: `station:${stationId}`,
             type: 'station',
             position: { x: 0, y: 0 },
-            width: 250,
-            height: 105,
+            width: 220,
+            height: 88,
             data: {
                 kind: 'station',
                 entityId: stationId,
@@ -266,8 +266,8 @@ function createTopology(
             id: mountpointNodeId,
             type: 'mountpoint',
             position: { x: 0, y: 0 },
-            width: 270,
-            height: 120,
+            width: 230,
+            height: 92,
             data: {
                 kind: 'mountpoint',
                 entityId: mountpoint.id,
@@ -308,8 +308,8 @@ function createTopology(
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 250,
-                height: 108,
+                width: 220,
+                height: 88,
                 data: rover.data,
             });
 
@@ -346,8 +346,8 @@ function createTopology(
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 250,
-                height: 108,
+                width: 220,
+                height: 88,
                 data: {
                     kind: 'rover',
                     entityId: `overflow-${mountpoint.id}`,
@@ -405,8 +405,8 @@ function createTopology(
             id: autoRouterNodeId,
             type: 'station',
             position: { x: 0, y: 0 },
-            width: 250,
-            height: 105,
+            width: 220,
+            height: 88,
             data: {
                 kind: 'station',
                 entityId: 'auto-router',
@@ -421,8 +421,8 @@ function createTopology(
             id: autoMountpointNodeId,
             type: 'mountpoint',
             position: { x: 0, y: 0 },
-            width: 270,
-            height: 120,
+            width: 230,
+            height: 92,
             data: {
                 kind: 'mountpoint',
                 entityId: 'AUTO',
@@ -470,8 +470,8 @@ function createTopology(
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 250,
-                height: 108,
+                width: 220,
+                height: 88,
                 data: {
                     kind: 'rover',
                     entityId: session.id,
@@ -522,8 +522,8 @@ function createTopology(
                 id: roverNodeId,
                 type: 'rover',
                 position: { x: 0, y: 0 },
-                width: 250,
-                height: 108,
+                width: 220,
+                height: 88,
                 data: {
                     kind: 'rover',
                     entityId: 'auto-overflow',
@@ -794,16 +794,16 @@ function MountpointTopologyCanvas({
             >
                 <Background
                     variant={BackgroundVariant.Dots}
-                    gap={18}
+                    gap={22}
                     size={1}
                     color="currentColor"
-                    className="ntrip-topology-background opacity-[0.14]"
+                    className="ntrip-topology-background opacity-[0.08]"
                 />
 
                 <Controls
                     position="bottom-right"
                     showInteractive={false}
-                    className="ntrip-topology-controls"
+                    className="ntrip-topology-controls !right-4 !bottom-4 hidden sm:flex"
                 />
             </ReactFlow>
 
@@ -815,19 +815,6 @@ function MountpointTopologyCanvas({
                     </div>
                 </div>
             ) : null}
-
-            <div className="pointer-events-none absolute top-3 left-1/2 z-10 hidden w-[min(42rem,calc(100%-8rem))] -translate-x-1/2 grid-cols-3 gap-2 lg:grid">
-                {['Source stations', 'Mountpoints', 'Rover clients'].map(
-                    (label) => (
-                        <div
-                            key={label}
-                            className="rounded-full border border-ntrip-cloud/8 bg-ntrip-ink/68 px-3 py-1.5 text-center text-[9px] font-semibold tracking-[0.12em] text-ntrip-cloud/38 uppercase backdrop-blur-xl"
-                        >
-                            {label}
-                        </div>
-                    ),
-                )}
-            </div>
         </div>
     );
 }
