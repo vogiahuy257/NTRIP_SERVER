@@ -1027,7 +1027,9 @@ export function WelcomeThreeScene({
             );
         };
 
-        (['base', 'uav'] as const).forEach(loadRealModel);
+        (Object.keys(WELCOME_MODEL_ASSETS) as WelcomeReplaceableModelNode[]).forEach(
+            loadRealModel,
+        );
 
         const updateScrollTarget = (): void => {
             const hero = document.querySelector<HTMLElement>(
@@ -1493,7 +1495,13 @@ export function WelcomeThreeScene({
                 const emphasized =
                     node.id === activeNodeRef.current ||
                     node.id === hoveredNode;
-                const targetScale = emphasized ? 1.075 : node.baseScale;
+                const targetScale = architectureFocusActive
+                    ? node.id === activeNodeRef.current
+                        ? 1.055
+                        : 0.94
+                    : emphasized
+                      ? 1.075
+                      : node.baseScale;
                 const nextScale = THREE.MathUtils.lerp(
                     node.slot.scale.x,
                     targetScale,
@@ -1501,11 +1509,25 @@ export function WelcomeThreeScene({
                 );
 
                 node.slot.scale.setScalar(nextScale);
+                const targetRingOpacity = architectureFocusActive
+                    ? node.id === activeNodeRef.current
+                        ? 0.58
+                        : 0.045
+                    : emphasized
+                      ? 0.52
+                      : 0.12;
+
                 node.ring.material.opacity = THREE.MathUtils.lerp(
                     node.ring.material.opacity,
-                    emphasized ? 0.52 : 0.12,
+                    targetRingOpacity,
                     reducedMotion ? 1 : 0.12,
                 );
+
+                if (architectureFocusActive && node.id === activeNodeRef.current) {
+                    node.ring.rotation.z = reducedMotion
+                        ? 0
+                        : elapsed * 0.22;
+                }
 
                 if (!reducedMotion && node.id === 'uav') {
                     node.slot.position.y =
@@ -1518,7 +1540,13 @@ export function WelcomeThreeScene({
                     activeNodeRef.current === 'caster' ||
                     path.from === activeNodeRef.current ||
                     path.to === activeNodeRef.current;
-                const pathOpacity = activePath ? 0.82 : 0.42;
+                const pathOpacity = architectureFocusActive
+                    ? activePath
+                        ? 0.92
+                        : 0.14
+                    : activePath
+                      ? 0.82
+                      : 0.42;
 
                 path.mesh.material.opacity = THREE.MathUtils.lerp(
                     path.mesh.material.opacity,
@@ -1530,10 +1558,30 @@ export function WelcomeThreeScene({
                     const offset = Number(particle.userData.pathOffset ?? 0);
                     const progress = (elapsed * path.speed + offset) % 1;
                     particle.position.copy(path.curve.getPointAt(progress));
+                    const particleOpacity = architectureFocusActive
+                        ? activePath
+                            ? 1
+                            : 0.12
+                        : activePath
+                          ? 0.95
+                          : 0.62;
+                    const particleScale = architectureFocusActive
+                        ? activePath
+                            ? 1.18
+                            : 0.72
+                        : 1;
+
                     particle.material.opacity = THREE.MathUtils.lerp(
                         particle.material.opacity,
-                        activePath ? 0.95 : 0.62,
+                        particleOpacity,
                         reducedMotion ? 1 : 0.1,
+                    );
+                    particle.scale.setScalar(
+                        THREE.MathUtils.lerp(
+                            particle.scale.x,
+                            particleScale,
+                            reducedMotion ? 1 : 0.1,
+                        ),
                     );
                 });
             }
