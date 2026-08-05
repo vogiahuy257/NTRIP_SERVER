@@ -126,47 +126,103 @@ export default function Welcome() {
     const [activeNode, setActiveNode] = useState<WelcomeSceneNode>('caster');
 
     useEffect(() => {
-        const steps = Array.from(
-            document.querySelectorAll<HTMLElement>(
-                '[data-welcome-architecture-step]',
-            ),
-        );
+        let animationFrame = 0;
 
-        if (steps.length === 0) {
-            return;
-        }
+        const updateActiveArchitectureNode = (): void => {
+            const steps = Array.from(
+                document.querySelectorAll<HTMLElement>(
+                    '[data-welcome-architecture-step]',
+                ),
+            ).filter((element) => element.offsetParent !== null);
 
-        const observer = new IntersectionObserver(
-            (entries) => {
-                const visibleEntry = entries
-                    .filter((entry) => entry.isIntersecting)
-                    .sort(
-                        (left, right) =>
-                            right.intersectionRatio - left.intersectionRatio,
-                    )[0];
+            if (steps.length === 0) {
+                return;
+            }
 
-                const node = visibleEntry?.target.getAttribute(
-                    'data-welcome-architecture-step',
+            /*
+            * Dùng vùng 52% chiều cao viewport làm điểm kích hoạt.
+            * Thẻ gần đường này nhất sẽ trở thành active.
+            */
+            const activationLine = window.innerHeight * 0.52;
+
+            const nearestStep = steps
+                .map((element) => {
+                    const bounds = element.getBoundingClientRect();
+
+                    const center =
+                        bounds.top + bounds.height / 2;
+
+                    return {
+                        element,
+                        distance: Math.abs(
+                            center - activationLine,
+                        ),
+                    };
+                })
+                .sort(
+                    (left, right) =>
+                        left.distance - right.distance,
+                )[0];
+
+            if (!nearestStep) {
+                return;
+            }
+
+            const node =
+                nearestStep.element.dataset
+                    .welcomeArchitectureStep;
+
+            if (
+                node === 'base' ||
+                node === 'caster' ||
+                node === 'uav' ||
+                node === 'rover'
+            ) {
+                setActiveNode(node);
+            }
+        };
+
+        const scheduleUpdate = (): void => {
+            window.cancelAnimationFrame(
+                animationFrame,
+            );
+
+            animationFrame =
+                window.requestAnimationFrame(
+                    updateActiveArchitectureNode,
                 );
+        };
 
-                if (
-                    node === 'base' ||
-                    node === 'caster' ||
-                    node === 'uav' ||
-                    node === 'rover'
-                ) {
-                    setActiveNode(node);
-                }
-            },
+        window.addEventListener(
+            'scroll',
+            scheduleUpdate,
             {
-                rootMargin: '-32% 0px -42% 0px',
-                threshold: [0.2, 0.45, 0.7],
+                passive: true,
             },
         );
 
-        steps.forEach((step) => observer.observe(step));
+        window.addEventListener(
+            'resize',
+            scheduleUpdate,
+        );
 
-        return () => observer.disconnect();
+        scheduleUpdate();
+
+        return () => {
+            window.cancelAnimationFrame(
+                animationFrame,
+            );
+
+            window.removeEventListener(
+                'scroll',
+                scheduleUpdate,
+            );
+
+            window.removeEventListener(
+                'resize',
+                scheduleUpdate,
+            );
+        };
     }, []);
 
     return (

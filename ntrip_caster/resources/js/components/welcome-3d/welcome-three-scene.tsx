@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { GLTFLoader  } from 'three/addons/loaders/GLTFLoader.js';
-import type {GLTF} from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 
-import {
-    WELCOME_MODEL_ASSETS
-    
-    
+import { WELCOME_MODEL_ASSETS } from './welcome-model-assets';
+import type {
+    WelcomeReplaceableModelNode,
+    WelcomeSceneNode,
 } from './welcome-model-assets';
-import type {WelcomeReplaceableModelNode, WelcomeSceneNode} from './welcome-model-assets';
 
 type WelcomeThreeSceneProps = {
     activeNode: WelcomeSceneNode;
@@ -39,6 +38,116 @@ const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
     uav: new THREE.Vector3(4.15, 1.55, -1.15),
     rover: new THREE.Vector3(4.15, -0.3, 2.25),
 };
+
+type ArchitectureFocusSettings = {
+    distance: number;
+    targetHeight: number;
+    horizontalOffset: number;
+    fov: number;
+};
+
+type ArchitectureFocusFrame = {
+    position: THREE.Vector3;
+    target: THREE.Vector3;
+    fov: number;
+};
+
+/**
+ * Architecture always uses one stable camera angle.
+ *
+ * Only the focus anchor and distance change between Base, Caster, UAV and
+ * Rover. This keeps the visual language consistent while scrolling.
+ */
+const ARCHITECTURE_VIEW_DIRECTION = new THREE.Vector3(
+    0.62,
+    0.34,
+    0.72,
+).normalize();
+
+/**
+ * Horizontal screen-right vector for the fixed Architecture camera.
+ *
+ * Looking slightly to the left of each node makes that node appear a little
+ * to the right of the viewport, leaving the UI column unobstructed.
+ */
+const ARCHITECTURE_SCREEN_RIGHT = new THREE.Vector3(
+    ARCHITECTURE_VIEW_DIRECTION.z,
+    0,
+    -ARCHITECTURE_VIEW_DIRECTION.x,
+).normalize();
+
+const ARCHITECTURE_FOCUS_SETTINGS: Record<
+    WelcomeSceneNode,
+    ArchitectureFocusSettings
+> = {
+    base: {
+        distance: 6.4,
+        targetHeight: 1.05,
+        horizontalOffset: 1.05,
+        fov: 31,
+    },
+    caster: {
+        distance: 7.8,
+        targetHeight: 1.45,
+        horizontalOffset: 1.2,
+        fov: 31,
+    },
+    uav: {
+        distance: 7.2,
+        targetHeight: 0.05,
+        horizontalOffset: 1.15,
+        fov: 30,
+    },
+    rover: {
+        distance: 6.8,
+        targetHeight: 0.82,
+        horizontalOffset: 1.1,
+        fov: 31,
+    },
+};
+
+function getArchitectureDistanceMultiplier(viewportWidth: number): number {
+    if (viewportWidth < 480) {
+        return 1.48;
+    }
+
+    if (viewportWidth < 768) {
+        return 1.3;
+    }
+
+    if (viewportWidth < 1024) {
+        return 1.15;
+    }
+
+    return 1;
+}
+
+function getArchitectureFocusFrame(
+    node: WelcomeSceneNode,
+    anchor: THREE.Vector3,
+    viewportWidth: number,
+): ArchitectureFocusFrame {
+    const settings = ARCHITECTURE_FOCUS_SETTINGS[node];
+    const distance =
+        settings.distance * getArchitectureDistanceMultiplier(viewportWidth);
+
+    const position = anchor
+        .clone()
+        .addScaledVector(ARCHITECTURE_VIEW_DIRECTION, distance);
+
+    const target = anchor
+        .clone()
+        .addScaledVector(
+            ARCHITECTURE_SCREEN_RIGHT,
+            -settings.horizontalOffset,
+        );
+
+    return {
+        position,
+        target,
+        fov: settings.fov,
+    };
+}
 
 type ResponsiveSceneProfile = {
     cameraPoints: THREE.Vector3[];
@@ -688,6 +797,7 @@ export function WelcomeThreeScene({
         const lookAtTarget = new THREE.Vector3();
         const cameraDesired = new THREE.Vector3();
         const cameraTargetDesired = new THREE.Vector3();
+        const architectureAnchor = new THREE.Vector3();
         const modelNodes = new Map<WelcomeSceneNode, InteractiveNode>();
         const pathRuntimes: DataPath[] = [];
         const loader = new GLTFLoader();
@@ -702,6 +812,8 @@ export function WelcomeThreeScene({
         let hoveredNode: WelcomeSceneNode | null = null;
         let scrollTarget = 0;
         let scrollCurrent = 0;
+        let architectureFocusActive = false;
+        let viewportWidth = Math.max(container.clientWidth, 1);
         let dragRotationY = 0;
         let dragRotationX = 0;
         let dragging = false;
@@ -924,6 +1036,8 @@ export function WelcomeThreeScene({
             );
 
             if (!hero || !architecture) {
+                architectureFocusActive = false;
+
                 const maximum = Math.max(
                     1,
                     document.documentElement.scrollHeight - window.innerHeight,
@@ -939,6 +1053,15 @@ export function WelcomeThreeScene({
             const heroRect = hero.getBoundingClientRect();
 
             const architectureRect = architecture.getBoundingClientRect();
+
+            /*
+             * The Architecture camera mode is active while the section is
+             * pinned across most of the viewport. Outside this interval the
+             * normal scroll camera curve remains in control.
+             */
+            architectureFocusActive =
+                architectureRect.top <= viewportHeight * 0.18 &&
+                architectureRect.bottom >= viewportHeight * 0.82;
 
             const heroBottom = window.scrollY + heroRect.bottom;
 
@@ -1044,6 +1167,8 @@ export function WelcomeThreeScene({
         const updateSize = (): void => {
             const width = Math.max(container.clientWidth, 1);
             const height = Math.max(container.clientHeight, 1);
+
+            viewportWidth = width;
             const profile = getResponsiveSceneProfile(width);
 
             camera.aspect = width / height;
@@ -1136,7 +1261,11 @@ export function WelcomeThreeScene({
         };
 
         const handlePointerDown = (event: PointerEvent): void => {
-            if (event.pointerType !== 'mouse' || event.button !== 0) {
+            if (
+                architectureFocusActive ||
+                event.pointerType !== 'mouse' ||
+                event.button !== 0
+            ) {
                 return;
             }
 
@@ -1249,7 +1378,37 @@ export function WelcomeThreeScene({
             cameraDesired.copy(cameraCurve.getPointAt(scrollCurrent));
             cameraTargetDesired.copy(targetCurve.getPointAt(scrollCurrent));
 
-            if (!reducedMotion && pointerInfluence > 0) {
+            let architectureFocusFov: number | null = null;
+
+            if (architectureFocusActive) {
+                const focusedNode = modelNodes.get(activeNodeRef.current);
+
+                if (focusedNode) {
+                    world.updateMatrixWorld(true);
+                    focusedNode.slot.getWorldPosition(architectureAnchor);
+
+                    architectureAnchor.y +=
+                        ARCHITECTURE_FOCUS_SETTINGS[
+                            activeNodeRef.current
+                        ].targetHeight * world.scale.y;
+
+                    const architectureFrame = getArchitectureFocusFrame(
+                        activeNodeRef.current,
+                        architectureAnchor,
+                        viewportWidth,
+                    );
+
+                    cameraDesired.copy(architectureFrame.position);
+                    cameraTargetDesired.copy(architectureFrame.target);
+                    architectureFocusFov = architectureFrame.fov;
+                }
+            }
+
+            if (
+                !architectureFocusActive &&
+                !reducedMotion &&
+                pointerInfluence > 0
+            ) {
                 cameraDesired.x += pointerSmoothed.x * 0.45 * pointerInfluence;
                 cameraDesired.y += pointerSmoothed.y * 0.25 * pointerInfluence;
                 cameraTargetDesired.x +=
@@ -1302,19 +1461,26 @@ export function WelcomeThreeScene({
             );
 
             const zoomPulse = Math.sin(scrollCurrent * Math.PI * 5) * 1.15;
-            const desiredFov = clamp(
-                baseFov - zoomPulse,
-                baseFov - 5,
-                baseFov + 3,
-            );
+            const desiredFov =
+                architectureFocusFov ??
+                clamp(baseFov - zoomPulse, baseFov - 5, baseFov + 3);
             camera.fov +=
                 (desiredFov - camera.fov) * (reducedMotion ? 1 : 0.06);
             camera.updateProjectionMatrix();
 
+            const desiredWorldRotationY = architectureFocusActive
+                ? 0
+                : dragRotationY;
+            const desiredWorldRotationX = architectureFocusActive
+                ? 0
+                : dragRotationX;
+
             world.rotation.y +=
-                (dragRotationY - world.rotation.y) * (reducedMotion ? 1 : 0.08);
+                (desiredWorldRotationY - world.rotation.y) *
+                (reducedMotion ? 1 : 0.08);
             world.rotation.x +=
-                (dragRotationX - world.rotation.x) * (reducedMotion ? 1 : 0.08);
+                (desiredWorldRotationX - world.rotation.x) *
+                (reducedMotion ? 1 : 0.08);
 
             if (!dragging) {
                 updateHoveredNode();
