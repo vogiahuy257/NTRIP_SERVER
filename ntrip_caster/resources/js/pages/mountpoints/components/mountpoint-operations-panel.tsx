@@ -327,19 +327,19 @@ export function MountpointOperationsPanel({
 
     return (
         <>
-            <aside className="pointer-events-auto absolute inset-x-3 bottom-3 z-40 flex max-h-[min(74dvh,42rem)] min-h-0 flex-col overflow-hidden rounded-[1.75rem] border border-white/44 bg-ntrip-cloud/92 text-ntrip-ink shadow-ntrip-panel backdrop-blur-2xl sm:inset-x-auto sm:top-4 sm:bottom-auto sm:left-4 sm:h-[min(42rem,calc(100%-2rem))] sm:max-h-none sm:w-[19rem]">
+            <aside className="pointer-events-auto absolute inset-x-3 bottom-3 z-40 flex max-h-[min(74dvh,42rem)] min-h-0 flex-col overflow-hidden rounded-xl border border-white/44 bg-ntrip-cloud/92 text-ntrip-ink shadow-ntrip-panel backdrop-blur-2xl sm:inset-x-auto sm:top-4 sm:bottom-auto sm:left-4 sm:h-[min(42rem,calc(100%-2rem))] sm:max-h-none sm:w-[19rem]">
                 <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ntrip-ink/12 sm:hidden" />
 
                 <header className="flex items-center gap-3 px-4 pt-3 pb-3 sm:pt-4">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ntrip-ink text-ntrip-cloud">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-ntrip-ink text-ntrip-cloud">
                         <RadioTower className="size-4" />
                     </span>
 
                     <div className="min-w-0 flex-1">
-                        <h1 className="truncate text-sm font-semibold tracking-[-0.02em]">
+                        <h1 className="truncate text-base font-semibold tracking-[-0.02em]">
                             Network manager
                         </h1>
-                        <p className="mt-0.5 text-2xs text-ntrip-ink/46">
+                        <p className="mt-0.5 text-xs text-ntrip-ink/46">
                             {visibleMountpoints.length} mountpoints ·{' '}
                             {filteredAccounts.length} accounts
                         </p>
@@ -350,7 +350,7 @@ export function MountpointOperationsPanel({
                         variant="ghost"
                         size="icon"
                         onClick={() => onCollapsedChange(true)}
-                        className="size-10 rounded-xl"
+                        className="size-10 rounded-lg"
                         aria-label="Close network manager"
                     >
                         <X className="size-4 sm:hidden" />
@@ -367,7 +367,7 @@ export function MountpointOperationsPanel({
                                 onSearchQueryChange(event.target.value)
                             }
                             placeholder="Search network"
-                            className="h-10 rounded-xl border-ntrip-ink/8 bg-white/58 pl-9 text-micro shadow-none"
+                            className="h-10 rounded-lg border-ntrip-ink/8 bg-white/58 pl-9 text-xs shadow-none"
                         />
                     </div>
 
@@ -376,7 +376,7 @@ export function MountpointOperationsPanel({
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="h-10 shrink-0 rounded-xl border-ntrip-ink/8 bg-white/48 px-3 text-2xs"
+                                className="h-10 shrink-0 rounded-xl border-ntrip-ink/8 bg-white/48 px-3 text-xs"
                                 aria-label="Filter mountpoints"
                             >
                                 <Filter className="size-3.5" />
@@ -412,10 +412,10 @@ export function MountpointOperationsPanel({
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
                     <section>
                         <div className="mb-2 flex items-center justify-between">
-                            <h2 className="text-3xs font-semibold tracking-[0.12em] text-ntrip-ink/38 uppercase">
+                            <h2 className="text-xs font-semibold tracking-[0.12em] text-ntrip-ink/38 uppercase">
                                 Mountpoints
                             </h2>
-                            <span className="text-3xs text-ntrip-ink/38 tabular-nums">
+                            <span className="text-xs text-ntrip-ink/38 tabular-nums">
                                 {visibleMountpoints.length +
                                     (autoSessions.length > 0 ? 1 : 0)}
                             </span>
@@ -446,7 +446,7 @@ export function MountpointOperationsPanel({
                                         })
                                     }
                                     className={cn(
-                                        'flex min-h-11 w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition',
+                                        'flex min-h-11 w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition',
                                         selectedEntity?.kind === 'mountpoint' &&
                                             selectedEntity.entityId === 'AUTO'
                                             ? 'border-ntrip-teal/34 bg-ntrip-teal/10'
@@ -457,10 +457,10 @@ export function MountpointOperationsPanel({
                                         <RadioTower className="size-3.5" />
                                     </span>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block font-mono text-micro font-semibold">
+                                        <span className="block font-mono text-xs font-semibold">
                                             AUTO
                                         </span>
-                                        <span className="mt-0.5 block truncate text-3xs text-ntrip-ink/44">
+                                        <span className="mt-0.5 block truncate text-xs text-ntrip-ink/44">
                                             {autoSessions.length} Rover
                                             {autoSessions.length === 1
                                                 ? ''
@@ -474,7 +474,7 @@ export function MountpointOperationsPanel({
 
                             {visibleMountpoints.length === 0 &&
                             autoSessions.length === 0 ? (
-                                <p className="rounded-xl border border-dashed border-ntrip-ink/10 px-3 py-5 text-center text-micro text-ntrip-ink/42">
+                                <p className="rounded-lg border border-dashed border-ntrip-ink/10 px-3 py-5 text-center text-xs text-ntrip-ink/42">
                                     No matching mountpoints
                                 </p>
                             ) : (
@@ -512,7 +512,7 @@ export function MountpointOperationsPanel({
                                         <div
                                             key={mountpoint.id}
                                             className={cn(
-                                                'flex min-h-11 items-center gap-1 rounded-xl border p-1 transition',
+                                                'flex min-h-11 items-center gap-1 rounded-lg border p-1 transition',
                                                 selected
                                                     ? 'border-ntrip-teal/34 bg-ntrip-teal/10'
                                                     : 'border-transparent bg-white/28 hover:border-ntrip-ink/7 hover:bg-white/54',
@@ -533,10 +533,10 @@ export function MountpointOperationsPanel({
                                                 </span>
 
                                                 <span className="min-w-0 flex-1">
-                                                    <span className="block truncate font-mono text-micro font-semibold">
+                                                    <span className="block truncate font-mono text-xs font-semibold">
                                                         {mountpoint.name}
                                                     </span>
-                                                    <span className="mt-0.5 block truncate text-3xs text-ntrip-ink/43">
+                                                    <span className="mt-0.5 block truncate text-xs text-ntrip-ink/43">
                                                         {mountpoint.station
                                                             ?.name ??
                                                             'No station'}{' '}
@@ -566,7 +566,7 @@ export function MountpointOperationsPanel({
                                                     )
                                                 }
                                                 className={cn(
-                                                    'grid size-10 shrink-0 place-items-center rounded-xl transition',
+                                                    'grid size-10 shrink-0 place-items-center rounded-lg transition',
                                                     anonymous
                                                         ? 'bg-ntrip-teal/10 text-ntrip-teal'
                                                         : 'text-ntrip-ink/42 hover:bg-ntrip-ink/6',
@@ -590,7 +590,7 @@ export function MountpointOperationsPanel({
                     <section className="mt-5 border-t border-ntrip-ink/8 pt-4">
                         <div className="mb-2 flex items-center justify-between">
                             <div>
-                                <h2 className="text-3xs font-semibold tracking-[0.12em] text-ntrip-ink/38 uppercase">
+                                <h2 className="text-xs font-semibold tracking-[0.12em] text-ntrip-ink/38 uppercase">
                                     Rover accounts
                                 </h2>
                             </div>
@@ -611,7 +611,7 @@ export function MountpointOperationsPanel({
                                         )
                                     }
                                     disabled={isRefreshing}
-                                    className="size-10 rounded-xl"
+                                    className="size-10 rounded-lg"
                                     aria-label="Refresh Rover Accounts"
                                 >
                                     <RefreshCw
@@ -630,7 +630,7 @@ export function MountpointOperationsPanel({
                                             account: null,
                                         })
                                     }
-                                    className="size-10 rounded-xl bg-ntrip-ink text-ntrip-cloud hover:bg-ntrip-ink/86"
+                                    className="size-10 rounded-lg bg-ntrip-ink text-ntrip-cloud hover:bg-ntrip-ink/86"
                                     aria-label="Add Rover Account"
                                 >
                                     <Plus className="size-3.5" />
@@ -640,12 +640,12 @@ export function MountpointOperationsPanel({
 
                         <div className="space-y-1.5">
                             {isLoading ? (
-                                <div className="grid place-items-center py-8 text-micro text-ntrip-ink/44">
+                                <div className="grid place-items-center py-8 text-xs text-ntrip-ink/44">
                                     <RefreshCw className="mb-2 size-4 animate-spin" />
                                     Loading Rover Accounts
                                 </div>
                             ) : filteredAccounts.length === 0 ? (
-                                <p className="rounded-xl border border-dashed border-ntrip-ink/10 px-3 py-5 text-center text-micro text-ntrip-ink/42">
+                                <p className="rounded-lg border border-dashed border-ntrip-ink/10 px-3 py-5 text-center text-xs text-ntrip-ink/42">
                                     No matching Rover Accounts
                                 </p>
                             ) : (
@@ -660,7 +660,7 @@ export function MountpointOperationsPanel({
                                     return (
                                         <div
                                             key={account.id}
-                                            className="flex min-h-11 items-center gap-2 rounded-xl border border-transparent bg-white/28 px-2 py-1.5 transition hover:border-ntrip-ink/7 hover:bg-white/54"
+                                            className="flex min-h-11 items-center gap-2 rounded-lg border border-transparent bg-white/28 px-2 py-1.5 transition hover:border-ntrip-ink/7 hover:bg-white/54"
                                         >
                                             <span
                                                 className={cn(
@@ -681,17 +681,17 @@ export function MountpointOperationsPanel({
                                                 className="min-w-0 flex-1 py-1 text-left"
                                             >
                                                 <span className="flex items-center gap-1.5">
-                                                    <span className="truncate font-mono text-micro font-semibold">
+                                                    <span className="truncate font-mono text-xs font-semibold">
                                                         {account.username}
                                                     </span>
                                                     {activeSessions > 0 ? (
-                                                        <span className="shrink-0 rounded-full bg-ntrip-teal/10 px-1.5 py-0.5 text-3xs font-semibold text-ntrip-teal">
+                                                        <span className="shrink-0 rounded-full bg-ntrip-teal/10 px-1.5 py-0.5 text-xs font-semibold text-ntrip-teal">
                                                             {activeSessions}{' '}
                                                             live
                                                         </span>
                                                     ) : null}
                                                 </span>
-                                                <span className="mt-0.5 block truncate text-3xs text-ntrip-ink/43">
+                                                <span className="mt-0.5 block truncate text-xs text-ntrip-ink/43">
                                                     {account.displayName ??
                                                         `${account.mountpointCount} mountpoints`}
                                                 </span>
@@ -704,7 +704,7 @@ export function MountpointOperationsPanel({
                                                         variant="ghost"
                                                         size="icon"
                                                         disabled={loading}
-                                                        className="size-10 rounded-xl"
+                                                        className="size-10 rounded-lg"
                                                         aria-label={`Actions for ${account.username}`}
                                                     >
                                                         {loading ? (

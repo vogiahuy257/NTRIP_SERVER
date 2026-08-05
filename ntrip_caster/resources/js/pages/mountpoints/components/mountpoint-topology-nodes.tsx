@@ -93,7 +93,7 @@ function NodeShell({
     return (
         <div
             className={cn(
-                'w-[13.75rem] rounded-[1.1rem] border px-3 py-2.5 shadow-ntrip-node transition',
+                'w-[13.75rem] rounded-lg border px-3 py-2.5 shadow-ntrip-node transition',
                 'border-ntrip-cloud/10 bg-ntrip-ink/92 text-ntrip-cloud backdrop-blur-xl',
                 selected && 'border-ntrip-teal/68 shadow-ntrip-node-selected',
             )}
@@ -113,7 +113,7 @@ function StatusLine({
     trailing?: string;
 }) {
     return (
-        <div className="mt-2.5 flex items-center justify-between gap-3 text-2xs">
+        <div className="mt-2.5 flex items-center justify-between gap-3 text-xs">
             <span
                 data-status={status}
                 className="ntrip-status-inline inline-flex min-w-0 items-center gap-1.5"
@@ -144,10 +144,10 @@ export function StationTopologyNode({
                     </span>
 
                     <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold">
+                        <p className="truncate text-sm font-semibold">
                             {data.name}
                         </p>
-                        <p className="mt-0.5 truncate font-mono text-3xs text-ntrip-cloud/40">
+                        <p className="mt-0.5 truncate font-mono text-xs text-ntrip-cloud/40">
                             {data.deviceId}
                         </p>
                     </div>
@@ -183,7 +183,7 @@ export function MountpointTopologyNode({
                         <p className="truncate font-mono text-xs font-semibold">
                             {data.name}
                         </p>
-                        <p className="mt-0.5 truncate text-3xs text-ntrip-cloud/40">
+                        <p className="mt-0.5 truncate text-xs text-ntrip-cloud/40">
                             {data.identifier ?? 'NTRIP mountpoint'}
                         </p>
                     </div>
@@ -271,17 +271,17 @@ export function RoverTopologyNode({
 
                     <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-1.5">
-                            <p className="truncate text-xs font-semibold">
+                            <p className="truncate text-sm font-semibold">
                                 {data.label}
                             </p>
                             {data.autoMountpoint ? (
-                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ntrip-teal/12 px-1.5 py-0.5 text-[8px] font-semibold text-ntrip-teal uppercase">
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-ntrip-teal/12 px-1.5 py-0.5 text-xs font-semibold text-ntrip-teal uppercase">
                                     <Route className="size-2.5" />
                                     Auto
                                 </span>
                             ) : null}
                         </div>
-                        <p className="mt-0.5 truncate font-mono text-3xs text-ntrip-cloud/40">
+                        <p className="mt-0.5 truncate font-mono text-xs text-ntrip-cloud/40">
                             {data.username ?? data.remoteIp ?? 'Unknown Rover'}
                         </p>
                     </div>

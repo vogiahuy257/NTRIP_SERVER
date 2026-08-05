@@ -444,7 +444,7 @@ export default function MountpointsIndex() {
                     onPointerDown={stopMapEvent}
                     onDoubleClick={stopMapEvent}
                     onWheel={stopMapEvent}
-                    className="pointer-events-auto absolute inset-0 overflow-hidden rounded-[1.75rem] border border-white/24 bg-ntrip-ink shadow-ntrip-panel"
+                    className="pointer-events-auto absolute inset-0 overflow-hidden rounded-xl border border-white/24 bg-ntrip-ink shadow-ntrip-panel"
                 >
                     {loading ? (
                         <div className="grid h-full place-items-center bg-ntrip-ink text-ntrip-cloud">
@@ -491,7 +491,7 @@ export default function MountpointsIndex() {
                 />
 
                 {visibleError ? (
-                    <div className="pointer-events-auto absolute top-4 left-1/2 z-50 max-w-[min(34rem,calc(100%-7rem))] -translate-x-1/2 rounded-full border border-ntrip-coral/24 bg-ntrip-ink/88 px-4 py-2 text-center text-micro font-medium text-ntrip-coral shadow-ntrip-panel backdrop-blur-2xl">
+                    <div className="pointer-events-auto absolute top-4 left-1/2 z-50 max-w-[min(34rem,calc(100%-7rem))] -translate-x-1/2 rounded-full border border-ntrip-coral/24 bg-ntrip-ink/88 px-4 py-2 text-center text-xs font-medium text-ntrip-coral shadow-ntrip-panel backdrop-blur-2xl">
                         {visibleError}
                     </div>
                 ) : null}
@@ -522,7 +522,7 @@ function NetworkStatusBar({
     autoWaiting: number;
 }) {
     return (
-        <div className="pointer-events-auto absolute top-4 right-4 z-20 flex h-10 items-center gap-2 rounded-full border border-ntrip-cloud/10 bg-ntrip-ink/76 px-3 text-2xs font-medium text-ntrip-cloud/66 shadow-ntrip-panel-soft backdrop-blur-2xl">
+        <div className="pointer-events-auto absolute top-4 right-4 z-20 flex h-10 items-center gap-2 rounded-full border border-ntrip-cloud/10 bg-ntrip-ink/76 px-3 text-xs font-medium text-ntrip-cloud/66 shadow-ntrip-panel-soft backdrop-blur-2xl">
             <span
                 className={cn(
                     'size-1.5 rounded-full',
@@ -634,17 +634,17 @@ function TopologyInspector({
     const rows = inspectorRows(entity);
 
     return (
-        <aside className="pointer-events-auto absolute right-3 bottom-3 left-3 z-30 max-h-[42dvh] overflow-y-auto rounded-[1.5rem] border border-ntrip-cloud/12 bg-ntrip-ink/92 p-4 text-ntrip-cloud shadow-ntrip-topology-panel backdrop-blur-2xl sm:right-4 sm:bottom-4 sm:left-auto sm:w-[17rem]">
+        <aside className="pointer-events-auto absolute right-3 bottom-3 left-3 z-30 max-h-[42dvh] overflow-y-auto rounded-xl border border-ntrip-cloud/12 bg-ntrip-ink/92 p-4 text-ntrip-cloud shadow-ntrip-topology-panel backdrop-blur-2xl sm:right-4 sm:bottom-4 sm:left-auto sm:w-[17rem]">
             <div className="flex items-start gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-ntrip-teal/13 text-ntrip-teal">
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-ntrip-teal/13 text-ntrip-teal">
                     <Icon className="size-4" />
                 </span>
 
                 <div className="min-w-0 flex-1">
-                    <p className="text-3xs font-semibold tracking-[0.12em] text-ntrip-cloud/36 uppercase">
+                    <p className="text-xs font-semibold tracking-[0.12em] text-ntrip-cloud/36 uppercase">
                         {entity.kind}
                     </p>
-                    <h2 className="mt-0.5 truncate text-sm font-semibold">
+                    <h2 className="mt-0.5 truncate text-base font-semibold">
                         {'name' in entity ? entity.name : entity.label}
                     </h2>
                 </div>
@@ -654,14 +654,14 @@ function TopologyInspector({
                     variant="ghost"
                     size="icon"
                     onClick={onClose}
-                    className="size-10 rounded-xl text-ntrip-cloud/42 hover:bg-ntrip-cloud/8 hover:text-ntrip-cloud"
+                    className="size-10 rounded-lg text-ntrip-cloud/42 hover:bg-ntrip-cloud/8 hover:text-ntrip-cloud"
                     aria-label="Close details"
                 >
                     <X className="size-4" />
                 </Button>
             </div>
 
-            <dl className="mt-4 divide-y divide-ntrip-cloud/8 border-t border-ntrip-cloud/8 text-2xs">
+            <dl className="mt-4 divide-y divide-ntrip-cloud/8 border-t border-ntrip-cloud/8 text-xs">
                 {rows.map((row) => (
                     <div
                         key={row.label}
