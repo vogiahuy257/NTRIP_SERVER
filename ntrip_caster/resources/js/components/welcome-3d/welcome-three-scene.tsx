@@ -81,28 +81,31 @@ const ARCHITECTURE_FOCUS_SETTINGS: Record<
     ArchitectureFocusSettings
 > = {
     base: {
-        distance: 6.4,
-        targetHeight: 1.05,
-        horizontalOffset: 1.05,
-        fov: 31,
+        distance: 10.5,
+        targetHeight: 1.15,
+        horizontalOffset: 0.9,
+        fov: 37,
     },
+
     caster: {
-        distance: 7.8,
+        distance: 11.5,
         targetHeight: 1.45,
-        horizontalOffset: 1.2,
-        fov: 31,
+        horizontalOffset: 1,
+        fov: 37,
     },
+
     uav: {
-        distance: 7.2,
-        targetHeight: 0.05,
-        horizontalOffset: 1.15,
-        fov: 30,
+        distance: 10.8,
+        targetHeight: 0.1,
+        horizontalOffset: 0.95,
+        fov: 36,
     },
+
     rover: {
-        distance: 6.8,
-        targetHeight: 0.82,
-        horizontalOffset: 1.1,
-        fov: 31,
+        distance: 10.5,
+        targetHeight: 0.9,
+        horizontalOffset: 0.95,
+        fov: 37,
     },
 };
 
