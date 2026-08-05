@@ -174,12 +174,6 @@ const CAPABILITIES = [
     },
 ] as const;
 
-const NAVIGATION = [
-    ['Architecture', 'architecture'],
-    ['Capabilities', 'capabilities'],
-    ['Platform', 'platform'],
-] as const;
-
 function scrollToSection(id: string): void {
     document.getElementById(id)?.scrollIntoView({
         behavior: 'smooth',
@@ -353,14 +347,14 @@ export default function Welcome() {
                     className="fixed inset-0 z-0 h-[100svh] w-full"
                 />
 
-                <header className="fixed inset-x-0 top-0 z-40 px-2.5 pt-2.5 sm:px-4 sm:pt-4">
-                    <nav className="mx-auto flex min-h-14 max-w-[1440px] items-center justify-between gap-2 rounded-2xl border border-black/[0.08] bg-white/78 px-2.5 shadow-[0_18px_54px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:min-h-16 sm:px-4">
+                <header className="fixed inset-x-0 top-0 z-40 px-3 pt-3 sm:px-5 sm:pt-4">
+                    <nav className="mx-auto flex min-h-11 max-w-[1440px] items-center justify-between gap-2 px-0.5 sm:min-h-12 lg:min-h-16 lg:rounded-2xl lg:border lg:border-black/[0.08] lg:bg-white/78 lg:px-4 lg:shadow-[0_18px_54px_rgba(0,0,0,0.08)] lg:backdrop-blur-2xl">
                         <button
                             type="button"
                             onClick={() => scrollToSection('hero')}
-                            className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl text-left focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:gap-3"
+                            className="group flex min-h-10 min-w-0 items-center gap-2 rounded-full text-left focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:outline-none sm:gap-2.5 lg:min-h-11 lg:gap-3 lg:rounded-xl"
                         >
-                            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-black text-white sm:size-10">
+                            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-black text-white shadow-[0_10px_28px_rgba(0,0,0,0.18)] transition-transform duration-500 group-hover:rotate-6 sm:size-10 lg:rounded-xl lg:shadow-none">
                                 <RadioTower
                                     className="size-4 sm:size-[1.125rem]"
                                     strokeWidth={1.8}
@@ -368,33 +362,20 @@ export default function Welcome() {
                             </span>
 
                             <span className="min-w-0">
-                                <span className="block truncate text-[13px] leading-none font-bold tracking-[-0.025em] sm:text-sm">
+                                <span className="block truncate text-[12px] leading-none font-bold tracking-[-0.025em] sm:text-[13px] lg:text-sm">
                                     NTRIP Caster
                                 </span>
-                                <span className="mt-1 hidden truncate text-[11px] leading-none text-black/45 sm:block">
+                                <span className="mt-1 hidden truncate text-[11px] leading-none text-black/45 lg:block">
                                     GNSS correction infrastructure
                                 </span>
                             </span>
                         </button>
 
-                        <div className="hidden items-center gap-1 lg:flex">
-                            {NAVIGATION.map(([label, id]) => (
-                                <button
-                                    key={id}
-                                    type="button"
-                                    onClick={() => scrollToSection(id)}
-                                    className="min-h-10 rounded-xl px-3 text-xs font-semibold text-black/55 transition hover:bg-black/[0.05] hover:text-black focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:outline-none"
-                                >
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
-
                         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                             {auth.user ? (
                                 <Link
                                     href={dashboard()}
-                                    className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black px-3 text-xs font-semibold text-white transition hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4"
+                                    className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-black px-3.5 text-[11px] font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:min-h-11 sm:px-4 sm:text-xs lg:rounded-xl lg:shadow-none"
                                 >
                                     <span className="hidden min-[360px]:inline">
                                         Dashboard
@@ -408,13 +389,13 @@ export default function Welcome() {
                                 <>
                                     <Link
                                         href={login()}
-                                        className="hidden min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-black/60 transition hover:bg-black/[0.05] hover:text-black sm:inline-flex"
+                                        className="hidden min-h-10 items-center rounded-full px-3 text-[11px] font-semibold text-black/60 transition hover:bg-black/[0.05] hover:text-black md:inline-flex lg:min-h-11 lg:rounded-xl lg:text-xs"
                                     >
                                         Log in
                                     </Link>
                                     <Link
                                         href={register()}
-                                        className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black px-3 text-xs font-semibold text-white transition hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:px-4"
+                                        className="inline-flex min-h-10 items-center gap-1.5 rounded-full bg-black px-3.5 text-[11px] font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:min-h-11 sm:px-4 sm:text-xs lg:rounded-xl lg:shadow-none"
                                     >
                                         <span className="hidden min-[360px]:inline">
                                             Get started
@@ -436,20 +417,20 @@ export default function Welcome() {
                         data-welcome-hero
                         className="relative mx-auto flex min-h-[100svh] max-w-[1440px] scroll-mt-20 flex-col justify-end px-4 pt-24 pb-8 sm:px-6 sm:pt-28 sm:pb-12 md:px-8 lg:grid lg:grid-cols-[minmax(0,0.42fr)_minmax(0,0.58fr)] lg:items-center lg:px-10 lg:pt-28 lg:pb-16"
                     >
-                        <div className="max-w-2xl rounded-[1.5rem] border border-black/[0.07] bg-white/84 p-4 shadow-[0_24px_75px_rgba(0,0,0,0.08)] backdrop-blur-2xl sm:p-6 lg:max-w-[40rem] lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
+                        <div className="relative max-w-2xl sm:max-w-xl lg:max-w-[40rem]">
                             <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/75 px-3 py-2 text-[10px] font-semibold tracking-[0.12em] text-black/55 uppercase backdrop-blur-xl sm:text-[11px]">
                                 <span className="size-1.5 rounded-full bg-black" />
                                 Realtime GNSS infrastructure
                             </div>
 
-                            <h1 className="mt-5 max-w-[11ch] text-[clamp(2.35rem,11vw,4.25rem)] leading-[0.92] font-semibold tracking-[-0.065em] text-black sm:mt-6 sm:text-[clamp(3rem,8vw,5rem)] lg:text-[clamp(3.75rem,5.2vw,5.75rem)] xl:text-[clamp(4rem,5vw,6.25rem)]">
+                            <h1 className="mt-5 max-w-[11ch] text-[clamp(2.2rem,9.5vw,3.65rem)] leading-[0.92] font-semibold tracking-[-0.065em] text-black drop-shadow-[0_1px_0_rgba(255,255,255,0.7)] sm:mt-6 sm:text-[clamp(3rem,8vw,5rem)] lg:text-[clamp(3.75rem,5.2vw,5.75rem)] xl:text-[clamp(4rem,5vw,6.25rem)]">
                                 Precision correction.
                                 <span className="block text-black/35">
                                     Delivered everywhere.
                                 </span>
                             </h1>
 
-                            <p className="mt-5 max-w-xl text-sm leading-6 text-black/55 sm:mt-6 sm:text-base sm:leading-7 lg:text-lg lg:leading-8">
+                            <p className="mt-5 max-w-xl text-[13px] leading-6 text-black/55 sm:mt-6 sm:text-base sm:leading-7 lg:text-lg lg:leading-8">
                                 Manage RTK base stations, RTCM streams,
                                 mountpoints, UAVs and autonomous rovers from one
                                 realtime platform.
@@ -458,7 +439,7 @@ export default function Welcome() {
                             <div className="mt-6 grid gap-2 min-[420px]:grid-cols-2 sm:flex sm:flex-wrap sm:gap-3">
                                 <Link
                                     href={auth.user ? dashboard() : register()}
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-black px-5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-black px-5 text-sm font-semibold text-white shadow-[0_14px_38px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 hover:bg-black/[0.82] focus-visible:ring-2 focus-visible:ring-black/25 focus-visible:ring-offset-2 focus-visible:outline-none sm:min-h-12 sm:rounded-2xl sm:shadow-none"
                                 >
                                     {auth.user
                                         ? 'Open dashboard'
@@ -471,7 +452,7 @@ export default function Welcome() {
                                     onClick={() =>
                                         scrollToSection('architecture')
                                     }
-                                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white/72 px-5 text-sm font-semibold text-black transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:outline-none"
+                                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-black/10 bg-white/68 px-5 text-sm font-semibold text-black backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white focus-visible:ring-2 focus-visible:ring-black/15 focus-visible:outline-none sm:min-h-12 sm:rounded-2xl"
                                 >
                                     Explore network
                                     <ArrowDown className="size-4" />
