@@ -70,7 +70,7 @@ export const WELCOME_MODEL_ASSETS: Record<
 
     usv: {
         url: '/models/usv.glb',
-        targetSize: 3.8,
+        targetSize: 4.2,
         position: [0, 0, 0],
         rotation: [0, 0, 0],
         scale: 1,
