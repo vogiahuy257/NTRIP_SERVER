@@ -45,8 +45,8 @@ const NODE_POSITIONS: Record<WelcomeSceneNode, THREE.Vector3> = {
     base: new THREE.Vector3(-5.9, -0.1, 0.1),
     caster: new THREE.Vector3(0, 0.15, -0.45),
     uav: new THREE.Vector3(5.85, 1.75, -2.1),
-    rover: new THREE.Vector3(5.65, -0.3, 2.85),
-    usv: new THREE.Vector3(4.5, -0.18,  4.6),
+    rover: new THREE.Vector3(4.9, -0.3, 2.35),
+    usv: new THREE.Vector3(8.2, -0.18, 6.6),
 };
 
 type ArchitectureFocusSettings = {
@@ -126,10 +126,10 @@ const ARCHITECTURE_FOCUS_SETTINGS: Record<
     },
 
     usv: {
-        distance: 10.9,
-        targetHeight: 0.7,
-        horizontalOffset: 0.95,
-        fov: 37,
+        distance: 12.2,
+        targetHeight: 0.65,
+        horizontalOffset: 1.05,
+        fov: 39,
     },
 };
 
